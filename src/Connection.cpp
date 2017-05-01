@@ -48,7 +48,7 @@ extern "C"
 Connection::Connection(uint8_t num)
 	: number(num), state(ConnState::free), push(false),
 	  localPort(0), remotePort(0), remoteIp(0), closeTimer(0),
-	  writeIndex(0), unSent(0), unAcked(0), readIndex(0), alreadyRead(0),
+	  writeIndex(0), unSent(0), unAcked(0), queuedForSending(0), readIndex(0), alreadyRead(0),
 	  ownPcb(nullptr), pb(nullptr)
 {
 	writeBuffer = new uint8_t[WriteBufferLength];
@@ -124,7 +124,7 @@ void Connection::Poll()
 	else
 	{
 		// Check whether this socket needs to have data sent
-		if (unSent != 0 && (state == ConnState::connected || state == ConnState::closePending))
+		if (state == ConnState::connected || state == ConnState::closePending)
 		{
 			TrySendData();
 		}
@@ -183,29 +183,41 @@ size_t Connection::Write(const uint8_t *data, size_t length, bool doPush, bool c
 // Try to send some buffered data to the connection
 void Connection::TrySendData()
 {
-	size_t toSend = std::min<size_t>(tcp_sndbuf(ownPcb), unSent);
-	if (toSend != 0)
+	if (unSent != 0)
 	{
-		tcp_sent(ownPcb, conn_sent);
-		size_t unsentIndex = (writeIndex - unSent) % WriteBufferLength;
-		if (unsentIndex + toSend > WriteBufferLength)
+		size_t room = tcp_sndbuf(ownPcb);
+		if (room != 0)
 		{
-			const size_t chunk = WriteBufferLength - unsentIndex;
-			if (tcp_write(ownPcb, writeBuffer + unsentIndex, chunk, TCP_WRITE_FLAG_MORE) != ERR_OK)
+			size_t toSend = std::min<size_t>(room, unSent);
+			tcp_sent(ownPcb, conn_sent);
+			size_t unsentIndex = (writeIndex - unSent) % WriteBufferLength;
+			if (unsentIndex + toSend > WriteBufferLength)
 			{
-				return;
+				const size_t chunk = WriteBufferLength - unsentIndex;
+				if (tcp_write(ownPcb, writeBuffer + unsentIndex, chunk, TCP_WRITE_FLAG_MORE) != ERR_OK)
+				{
+					return;
+				}
+				unSent -= chunk;
+				toSend -= chunk;
+				unAcked += chunk;
+				queuedForSending += chunk;
+				unsentIndex = 0;
 			}
-			unSent -= chunk;
-			toSend -= chunk;
-			unAcked += chunk;
-			unsentIndex = 0;
-		}
 
-		if (tcp_write(ownPcb, writeBuffer + unsentIndex, toSend, (push && toSend == unSent) ? 0 : TCP_WRITE_FLAG_MORE) == ERR_OK)
-		{
-			unSent -= toSend;
-			unAcked += toSend;
+			if (tcp_write(ownPcb, writeBuffer + unsentIndex, toSend, (push && toSend == unSent) ? 0 : TCP_WRITE_FLAG_MORE) == ERR_OK)
+			{
+				unSent -= toSend;
+				unAcked += toSend;
+				queuedForSending += toSend;
+			}
 		}
+	}
+
+	if (queuedForSending >= TCP_MSS || (queuedForSending != 0 && push))
+	{
+		tcp_output(ownPcb);
+		queuedForSending = 0;
 	}
 }
 
@@ -242,7 +254,7 @@ size_t Connection::Read(uint8_t *data, size_t length)
 		} while (pb != nullptr && length != 0);
 
 		alreadyRead += lengthRead;
-		if (pb == nullptr)
+		if (pb == nullptr || alreadyRead >= TCP_MSS)
 		{
 			tcp_recved(ownPcb, alreadyRead);
 			alreadyRead = 0;
@@ -312,7 +324,7 @@ err_t Connection::Accept(tcp_pcb *pcb)
 	localPort = pcb->local_port;
 	remotePort = pcb->remote_port;
 	remoteIp = pcb->remote_ip.addr;
-	writeIndex = unSent = unAcked = readIndex = alreadyRead = 0;
+	writeIndex = unSent = unAcked = queuedForSending = readIndex = alreadyRead = 0;
 	push = false;
 
 	return ERR_OK;
@@ -342,12 +354,10 @@ err_t Connection::ConnRecv(pbuf *p, err_t err)
 	}
 	else if (pb != nullptr)
 	{
-		// Should not happen
-		return ERR_ABRT;
+		pbuf_cat(pb, p);
 	}
 	else
 	{
-		// We assume that LWIP is configured with sufficient read buffer space, so we just store the pbuf pointer
 		pb = p;
 		readIndex = alreadyRead = 0;
 	}

@@ -76,6 +76,7 @@ private:
 	size_t writeIndex;			// the next location in the buffer to write
 	size_t unSent;				// how much of the data in the buffer we haven't sent yet
 	size_t unAcked;				// how much data we have sent but hasn't been acknowledged
+	size_t queuedForSending;	// how much we have queued for sending
 	size_t readIndex;			// how much data we have already read from the current pbuf
 	size_t alreadyRead;			// how much data we read from previous pbufs and didn't tell LWIP about yet
 	tcp_pcb *ownPcb;
