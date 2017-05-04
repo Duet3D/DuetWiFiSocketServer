@@ -3,7 +3,7 @@
 #ifndef CONFIG_H_INCLUDED
 #define CONFIG_H_INCLUDED
 
-const char* const firmwareVersion = "1.10-alpha";
+const char* const firmwareVersion = "1.19-alpha1";
 //const char* const softApName = "DuetWiFi";
 
 //#define SPI_DEBUG
