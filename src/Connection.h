@@ -14,7 +14,7 @@
 #include <cstddef>
 #include "include/MessageFormats.h"			// for ConnState
 
-const size_t WriteBufferLength = 2 * 1024;
+const size_t WriteBufferLength = 4 * 1024;
 
 // If we #include "tcp.h" here we get clashes between two different ip_addr.h files, so don't do that here
 class tcp_pcb;
