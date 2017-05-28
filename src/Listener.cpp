@@ -25,13 +25,14 @@ extern "C"
 	}
 }
 
+
 // Static member data
 Listener *Listener::activeList = nullptr;
 Listener *Listener::freeList = nullptr;
 
 // Member functions
 Listener::Listener()
-	: next(nullptr), listeningPcb(nullptr), ip(0), port(0), maxConnections(0)
+	: next(nullptr), listeningPcb(nullptr), ip(0), port(0), maxConnections(0), protocol(0)
 {
 }
 
@@ -50,6 +51,7 @@ err_t Listener::Accept(tcp_pcb *pcb)
 			}
 		}
 	}
+	tcp_abort(pcb);
 	return ERR_ABRT;
 }
 
@@ -63,7 +65,7 @@ void Listener::Stop()
 	}
 }
 
-/*static*/ bool Listener::Listen(uint32_t ip, uint16_t port, uint16_t maxConns)
+/*static*/ bool Listener::Listen(uint32_t ip, uint16_t port, uint8_t protocol, uint16_t maxConns)
 {
 	// See if we are already listing for this
 	for (Listener *p = activeList; p != nullptr; )
@@ -94,6 +96,7 @@ void Listener::Stop()
 	}
 	p->ip = ip;
 	p->port = port;
+	p->protocol = protocol;
 	p->maxConnections = maxConns;
 
 	// Call LWIP to set up a listener
@@ -128,6 +131,18 @@ void Listener::Stop()
 		}
 		p = n;
 	}
+}
+
+/*static*/ uint16_t Listener::GetPortByProtocol(uint8_t protocol)
+{
+	for (Listener *p = activeList; p != nullptr; p = p->next)
+	{
+		if (p->protocol == protocol)
+		{
+			return p->port;
+		}
+	}
+	return 0;
 }
 
 /*static*/ Listener *Listener::Allocate()

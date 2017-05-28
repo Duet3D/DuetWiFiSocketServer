@@ -14,8 +14,6 @@
 #include <cstddef>
 #include "include/MessageFormats.h"			// for ConnState
 
-const size_t WriteBufferLength = 4 * 1024;
-
 // If we #include "tcp.h" here we get clashes between two different ip_addr.h files, so don't do that here
 class tcp_pcb;
 class pbuf;
@@ -56,7 +54,6 @@ public:
 
 private:
 	void FreePbuf();
-	void TrySendData();
 	void Report();
 
 	void SetState(ConnState st)
@@ -65,27 +62,23 @@ private:
 	}
 
 	uint8_t number;
-	ConnState state;
-	bool push;
+	volatile ConnState state;
 
 	uint16_t localPort;
 	uint16_t remotePort;
 
 	uint32_t remoteIp;
+	uint32_t writeTimer;
 	uint32_t closeTimer;
-	size_t writeIndex;			// the next location in the buffer to write
-	size_t unSent;				// how much of the data in the buffer we haven't sent yet
-	size_t unAcked;				// how much data we have sent but hasn't been acknowledged
-	size_t queuedForSending;	// how much we have queued for sending
+	volatile size_t unAcked;	// how much data we have sent but hasn't been acknowledged
 	size_t readIndex;			// how much data we have already read from the current pbuf
 	size_t alreadyRead;			// how much data we read from previous pbufs and didn't tell LWIP about yet
 	tcp_pcb *ownPcb;
 	pbuf *pb;
-	uint8_t *writeBuffer;
 
 	static Connection *connectionList[MaxConnections];
 	static size_t nextConnectionToPoll;
-	static bool connectionsChanged;
+	static volatile bool connectionsChanged;
 };
 
 #endif /* SRC_CONNECTION_H_ */

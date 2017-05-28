@@ -10,7 +10,8 @@
 #include "Arduino.h"			// for millis
 #include "Config.h"
 
-const uint32_t MaxSendTime = 5000;		// how long we wait for a send to complete before closing the port
+const uint32_t MaxWriteTime = 2000;		// how long we wait for a write operation to complete before it is cancelled
+const uint32_t MaxAckTime = 4000;		// how long we wait for a connection to acknowledge the remaining data before it is closed
 
 // C interface functions
 extern "C"
@@ -46,12 +47,9 @@ extern "C"
 
 // Public interface
 Connection::Connection(uint8_t num)
-	: number(num), state(ConnState::free), push(false),
-	  localPort(0), remotePort(0), remoteIp(0), closeTimer(0),
-	  writeIndex(0), unSent(0), unAcked(0), queuedForSending(0), readIndex(0), alreadyRead(0),
-	  ownPcb(nullptr), pb(nullptr)
+	: number(num), state(ConnState::free), localPort(0), remotePort(0), remoteIp(0), writeTimer(0), closeTimer(0),
+	  unAcked(0), readIndex(0), alreadyRead(0), ownPcb(nullptr), pb(nullptr)
 {
-	writeBuffer = new uint8_t[WriteBufferLength];
 }
 
 void Connection::GetStatus(ConnStatusResponse& resp) const
@@ -68,11 +66,20 @@ void Connection::GetStatus(ConnStatusResponse& resp) const
 // Close the connection gracefully
 void Connection::Close()
 {
+	if (ownPcb == nullptr)
+	{
+		// should never get here
+		return;
+	}
+
 	switch(state)
 	{
 	case ConnState::connected:						// both ends are still connected
 		if (unAcked == 0)
 		{
+			tcp_recv(ownPcb, nullptr);
+			tcp_sent(ownPcb, nullptr);
+			tcp_err(ownPcb, nullptr);
 			tcp_close(ownPcb);
 			ownPcb = nullptr;
 			SetState(ConnState::free);
@@ -85,6 +92,10 @@ void Connection::Close()
 		break;
 
 	case ConnState::otherEndClosed:					// the other end has already closed the connection
+	case ConnState::closeReady:						// the other end has closed and we were already closePending
+		tcp_recv(ownPcb, nullptr);
+		tcp_sent(ownPcb, nullptr);
+		tcp_err(ownPcb, nullptr);
 		tcp_close(ownPcb);
 		ownPcb = nullptr;
 		SetState(ConnState::free);
@@ -107,6 +118,9 @@ void Connection::Terminate()
 	FreePbuf();
 	if (ownPcb != nullptr)
 	{
+		tcp_recv(ownPcb, nullptr);
+		tcp_sent(ownPcb, nullptr);
+		tcp_err(ownPcb, nullptr);
 		tcp_abort(ownPcb);
 		ownPcb = nullptr;
 	}
@@ -116,24 +130,32 @@ void Connection::Terminate()
 // Perform housekeeping tasks
 void Connection::Poll()
 {
-	if (state == ConnState::closeReady)
+	if (state == ConnState::connected)
 	{
-		tcp_close(ownPcb);
-		SetState(ConnState::free);
-	}
-	else
-	{
-		// Check whether this socket needs to have data sent
-		if (state == ConnState::connected || state == ConnState::closePending)
+		// Are we still waiting for data to be written?
+		if (writeTimer > 0 && millis() - writeTimer >= MaxWriteTime)
 		{
-			TrySendData();
+			// Terminate it
+			Terminate();
 		}
-
-		// Check whether this sockets should be closed
-		if (state == ConnState::closePending && ((unSent == 0 && unAcked == 0) || millis() - closeTimer >= MaxSendTime))
+	}
+	else if (state == ConnState::closeReady)
+	{
+		// Deferred close, possibly outside the ISR
+		Close();
+	}
+	else if (state == ConnState::closePending)
+	{
+		// We're about to close this connection and we're still waiting for the remaining data to be acknowledged
+		if (unAcked == 0)
 		{
-			tcp_close(ownPcb);
-			SetState(ConnState::free);
+			// All data has been received, close this connection next time
+			SetState(ConnState::closeReady);
+		}
+		else if (millis() - closeTimer >= MaxAckTime)
+		{
+			// The acknowledgment timer has expired, abort this connection
+			Terminate();
 		}
 	}
 }
@@ -141,93 +163,51 @@ void Connection::Poll()
 // Write data to the connection. The amount of data may be zero.
 size_t Connection::Write(const uint8_t *data, size_t length, bool doPush, bool closeAfterSending)
 {
-	if (state != ConnState::connected)
+	// Can we write anything at all?
+	if (CanWrite() == 0)
 	{
+		if (writeTimer == 0)
+		{
+			// No - there is no space left. Don't wait forever until there is any available
+			writeTimer = millis();
+		}
 		return 0;
 	}
 
-	// Copy as much data as we can to the buffer
-	const size_t amount = std::min<size_t>(length, CanWrite());
-	if (amount != 0)
+	// Send one SPI packet at once
+	const bool push = doPush || closeAfterSending;
+	err_t result = tcp_write(ownPcb, data, length, push ? TCP_WRITE_FLAG_COPY : TCP_WRITE_FLAG_COPY | TCP_WRITE_FLAG_MORE);
+	if (result == ERR_OK)
 	{
-		if (writeIndex + amount >= WriteBufferLength)
-		{
-			const size_t chunk = WriteBufferLength - writeIndex;
-			memcpy(writeBuffer + writeIndex, data, chunk);
-			memcpy(writeBuffer, data + chunk, amount - chunk);
-			writeIndex = amount - chunk;
-		}
-		else
-		{
-			memcpy(writeBuffer + writeIndex, data, amount);
-			writeIndex += amount;
-		}
-		unSent += amount;
+		// Data could be successfully written
+		writeTimer = 0;
+		unAcked += length;
+	}
+	else
+	{
+		// Something went wrong. Let the main firmware deal with this
+		return 0;
 	}
 
-	if (amount == length)
+	// See if we need to push the remaining data
+	if (push || tcp_sndbuf(ownPcb) <= TCP_SNDLOWAT)
 	{
-		push = doPush || closeAfterSending;
+		tcp_output(ownPcb);
 	}
 
-	TrySendData();
-
-	if (closeAfterSending && amount == length)
+	// Close the connection again when we're done
+	if (closeAfterSending)
 	{
 		closeTimer = millis();
 		SetState(ConnState::closePending);
 	}
-	return amount;
-}
-
-// Try to send some buffered data to the connection
-void Connection::TrySendData()
-{
-	if (unSent != 0)
-	{
-		size_t room = tcp_sndbuf(ownPcb);
-		if (room != 0)
-		{
-			size_t toSend = std::min<size_t>(room, unSent);
-			tcp_sent(ownPcb, conn_sent);
-			size_t unsentIndex = (writeIndex - unSent) % WriteBufferLength;
-			if (unsentIndex + toSend > WriteBufferLength)
-			{
-				const size_t chunk = WriteBufferLength - unsentIndex;
-				if (tcp_write(ownPcb, writeBuffer + unsentIndex, chunk, TCP_WRITE_FLAG_MORE) != ERR_OK)
-				{
-					return;
-				}
-				unSent -= chunk;
-				toSend -= chunk;
-				unAcked += chunk;
-				queuedForSending += chunk;
-				unsentIndex = 0;
-			}
-
-			if (tcp_write(ownPcb, writeBuffer + unsentIndex, toSend, (push && toSend == unSent) ? 0 : TCP_WRITE_FLAG_MORE) == ERR_OK)
-			{
-				unSent -= toSend;
-				unAcked += toSend;
-				queuedForSending += toSend;
-			}
-		}
-	}
-
-	if (queuedForSending >= TCP_MSS || (queuedForSending != 0 && push))
-	{
-		tcp_output(ownPcb);
-		queuedForSending = 0;
-	}
+	return length;
 }
 
 size_t Connection::CanWrite() const
 {
-	if (state != ConnState::connected)
-	{
-		return 0;
-	}
-	return WriteBufferLength - unSent - unAcked;		// return the amount of free space in the wrkite buffer
+	// Return the amount of free space in the write buffer
+	return (state == ConnState::connected) ? tcp_sndbuf(ownPcb) : 0;
 }
 
 size_t Connection::Read(uint8_t *data, size_t length)
@@ -319,22 +299,25 @@ err_t Connection::Accept(tcp_pcb *pcb)
 	ownPcb = pcb;
 	tcp_arg(pcb, this);				// tell LWIP that this is the structure we wish to be passed for our callbacks
 	tcp_recv(pcb, conn_recv);		// tell LWIP that we wish to be informed of incoming data by a call to the conn_recv() function
+	tcp_sent(pcb, conn_sent);
 	tcp_err(pcb, conn_err);
 	SetState(ConnState::connected);
 	localPort = pcb->local_port;
 	remotePort = pcb->remote_port;
 	remoteIp = pcb->remote_ip.addr;
-	writeIndex = unSent = unAcked = queuedForSending = readIndex = alreadyRead = 0;
-	push = false;
+	writeTimer = closeTimer = 0;
+	unAcked = readIndex = alreadyRead = 0;
 
 	return ERR_OK;
 }
 
 void Connection::ConnError(err_t err)
 {
-	//TODO tell client about the error
-	SetState(ConnState::aborted);
+	tcp_sent(ownPcb, nullptr);
+	tcp_recv(ownPcb, nullptr);
+	tcp_err(ownPcb, nullptr);
 	ownPcb = nullptr;
+	SetState(ConnState::aborted);
 }
 
 err_t Connection::ConnRecv(pbuf *p, err_t err)
@@ -480,6 +463,6 @@ void Connection::FreePbuf()
 // Static data
 Connection *Connection::connectionList[MaxConnections] = { 0 };
 size_t Connection::nextConnectionToPoll = 0;
-bool Connection::connectionsChanged = true;
+volatile bool Connection::connectionsChanged = true;
 
 // End
