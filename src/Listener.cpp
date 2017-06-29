@@ -65,6 +65,7 @@ void Listener::Stop()
 	}
 }
 
+// Set up a listener on a port, returning true if successful
 /*static*/ bool Listener::Listen(uint32_t ip, uint16_t port, uint8_t protocol, uint16_t maxConns)
 {
 	// See if we are already listing for this
@@ -100,7 +101,7 @@ void Listener::Stop()
 	p->maxConnections = maxConns;
 
 	// Call LWIP to set up a listener
-	tcp_pcb* tempPcb = tcp_new();
+	tcp_pcb* const tempPcb = tcp_new();
 	if (tempPcb == nullptr)
 	{
 		Release(p);
@@ -109,8 +110,20 @@ void Listener::Stop()
 
 	ip_addr tempIp;
 	tempIp.addr = ip;
-	tcp_bind(tempPcb, &tempIp, port);
+	tempPcb->so_options |= SOF_REUSEADDR;			// not sure we need this, but the Arduino HTTP server does it
+	if (tcp_bind(tempPcb, &tempIp, port) != ERR_OK)
+	{
+		tcp_close(tempPcb);
+		Release(p);
+		return false;
+	}
 	p->listeningPcb = tcp_listen(tempPcb);
+	if (p->listeningPcb == nullptr)
+	{
+		tcp_close(tempPcb);
+		Release(p);
+		return false;
+	}
 	tcp_arg(p->listeningPcb, p);
 	tcp_accept(p->listeningPcb, conn_accept);
 	p->next = activeList;
@@ -118,12 +131,13 @@ void Listener::Stop()
 	return true;
 }
 
+// Stop listening on the specified port, or on all ports if 'port' is zero
 /*static*/ void Listener::StopListening(uint16_t port)
 {
 	for (Listener *p = activeList; p != nullptr; )
 	{
 		Listener *n = p->next;
-		if (p->port == port)
+		if (port == 0 || port == p->port)
 		{
 			p->Stop();
 			Unlink(p);

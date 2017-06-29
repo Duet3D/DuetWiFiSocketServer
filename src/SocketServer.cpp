@@ -122,7 +122,7 @@ pre(currentState == NetworkState::disabled)
 	strncpy(currentSsid, apData.ssid, ARRAY_SIZE(currentSsid) - 1);
 	currentSsid[ARRAY_SIZE(currentSsid) - 1] = 0;
 
-	wifi_station_set_hostname(webHostName);     	// must do this before calling WiFi.begin()
+	wifi_station_set_hostname(webHostName);     				// must do this before calling WiFi.begin()
 	WiFi.config(IPAddress(apData.ip), IPAddress(apData.gateway), IPAddress(apData.netmask), IPAddress(), IPAddress());
 	WiFi.mode(WIFI_STA);
 	WiFi.begin(apData.ssid, apData.password);
@@ -143,15 +143,14 @@ void ConnectPoll()
 		}
 		else if (millis() - connectStartTime >= MaxConnectTime)
 		{
-			Serial.println("WIFI ERROR");
-			WiFi.mode(WIFI_STA);
-			WiFi.disconnect();
-			delay(100);
+			WiFi.mode(WIFI_OFF);
+			delay(10);
 			currentState = WiFiState::idle;
 			strcpy(lastConnectError, "failed to connect to access point ");
 			strncat(lastConnectError, currentSsid, ARRAY_SIZE(lastConnectError) - strlen(lastConnectError) - 1);
+			lastError = lastConnectError;
+			debugPrintln("timed out trying to connect to AP");
 			digitalWrite(EspReqTransferPin, LOW);				// force a status update when complete
-			debugPrintln("Connection timeout");
 		}
 	}
 }
@@ -167,6 +166,8 @@ void StartClient(const char * array ssid)
 		if (num_ssids < 0)
 		{
 			lastError = "network scan failed";
+			currentState = WiFiState::idle;
+			return;
 		}
 
 		// Find the strongest network that we know about
@@ -181,11 +182,15 @@ void StartClient(const char * array ssid)
 		if (strongestNetwork < 0)
 		{
 			lastError = "no known networks found";
+			currentState = WiFiState::idle;
+			return;
 		}
 	}
 	else if (!RetrieveSsidData(ssid, ssidData))
 	{
 		lastError = "no data found for requested SSID";
+		currentState = WiFiState::idle;
+		return;
 	}
 
 	ConnectToAccessPoint(ssidData);
@@ -196,13 +201,13 @@ bool CheckValidString(const char * array s, size_t n, bool isSsid)
 	for (size_t i = 0; i < n; ++i)
 	{
 		char c = s[i];
-		if (c < 0x20 || c == 0x7F)
-		{
-			return false;					// bad character
-		}
 		if (c == 0)
 		{
 			return i != 0 || !isSsid;		// the SSID may not be empty but the password can be
+		}
+		if (c < 0x20 || c == 0x7F)
+		{
+			return false;					// bad character
 		}
 	}
 	return false;							// no null terminator
@@ -233,18 +238,41 @@ void StartAccessPoint()
 
 	if (ValidApData(apData))
 	{
-		WiFi.mode(WIFI_AP);
-		WiFi.softAPConfig(apData.ip, apData.ip, IPAddress(255, 255, 255, 0));
-		WiFi.softAP(apData.ssid, apData.password, (apData.channel == 0) ? DefaultWiFiChannel : apData.channel);
-		Serial.println("WiFi -> DuetWiFi");
-		dns.setErrorReplyCode(DNSReplyCode::NoError);
-		dns.start(53, "*", apData.ip);
-		currentState = WiFiState::runningAsAccessPoint;
-		debugPrintln("AP started");
+		strncpy(currentSsid, apData.ssid, ARRAY_SIZE(currentSsid) - 1);
+		currentSsid[ARRAY_SIZE(currentSsid) - 1] = 0;
+		bool ok = WiFi.mode(WIFI_AP);
+		if (ok)
+		{
+			IPAddress apIP(apData.ip);
+			ok = WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+		}
+		if (ok)
+		{
+			ok = WiFi.softAP(currentSsid, apData.password, (apData.channel == 0) ? DefaultWiFiChannel : apData.channel);
+		}
+		if (ok)
+		{
+			dns.setErrorReplyCode(DNSReplyCode::NoError);
+			if (!dns.start(53, "*", apData.ip))
+			{
+				lastError = "Failed to start DNS";
+			}
+			debugPrintln("AP started");
+			strncpy(currentSsid, apData.ssid, ARRAY_SIZE(currentSsid) - 1);
+			currentSsid[ARRAY_SIZE(currentSsid) - 1] = 0;
+			delay(100);		// trying this to see if it helps
+			currentState = WiFiState::runningAsAccessPoint;
+		}
+		else
+		{
+			lastError = "Failed to start access point";
+			currentState = WiFiState::idle;
+		}
 	}
 	else
 	{
 		lastError = "invalid access point configuration";
+		currentState = WiFiState::idle;
 	}
 }
 
@@ -345,7 +373,6 @@ void ProcessRequest()
 
 		case NetworkCommand::networkStartClient:			// connect to an access point
 		case NetworkCommand::networkStartAccessPoint:		// run as an access point
-		case NetworkCommand::networkFactoryReset:			// clear remembered list, reset factory defaults
 			if (currentState == WiFiState::idle)
 			{
 				deferCommand = true;
@@ -357,6 +384,11 @@ void ProcessRequest()
 			}
 			break;
 
+		case NetworkCommand::networkFactoryReset:			// clear remembered list, reset factory defaults
+			deferCommand = true;
+			messageHeaderIn.hdr.param32 = hspi.transfer32(ResponseEmpty);
+			break;
+
 		case NetworkCommand::networkStop:					// disconnect from an access point, or close down our own access point
 			deferCommand = true;
 			messageHeaderIn.hdr.param32 = hspi.transfer32(ResponseEmpty);
@@ -364,8 +396,12 @@ void ProcessRequest()
 
 		case NetworkCommand::networkGetStatus:				// get the network connection status
 			{
-				NetworkStatusResponse *response = reinterpret_cast<NetworkStatusResponse*>(transferBuffer);
-				response->ipAddress = static_cast<uint32_t>(WiFi.localIP());
+				NetworkStatusResponse * const response = reinterpret_cast<NetworkStatusResponse*>(transferBuffer);
+				response->ipAddress = (currentState == WiFiState::runningAsAccessPoint)
+										? static_cast<uint32_t>(WiFi.softAPIP())
+										: (currentState == WiFiState::connected)
+										  ? static_cast<uint32_t>(WiFi.localIP())
+											  : 0;
 				response->freeHeap = ESP.getFreeHeap();
 				response->resetReason = ESP.getResetInfoPtr()->reason;
 				response->flashSize = ESP.getFlashChipRealSize();
@@ -444,10 +480,10 @@ void ProcessRequest()
 			}
 			break;
 
-		case NetworkCommand::networkListSsids:				// list the access points we know about
+		case NetworkCommand::networkListSsids:				// list the access points we know about, plus our own access point details
 			{
 				char *p = reinterpret_cast<char*>(transferBuffer);
-				for (size_t i = 1; i <= MaxRememberedNetworks; ++i)
+				for (size_t i = 0; i <= MaxRememberedNetworks; ++i)
 				{
 					WirelessConfigurationData tempData;
 					EEPROM.get(i * sizeof(WirelessConfigurationData), tempData);
@@ -457,6 +493,11 @@ void ProcessRequest()
 						{
 							*p++ = tempData.ssid[j];
 						}
+						*p++ = '\n';
+					}
+					else if (i == 0)
+					{
+						// Include an empty entry for our own access point SSID
 						*p++ = '\n';
 					}
 				}
@@ -620,7 +661,7 @@ void ProcessRequest()
 		}
 	}
 
-	digitalWrite(SamSSPin, HIGH);     // de-assert CS to SAM to end the transaction and tell SAM the transfer is complete
+	digitalWrite(SamSSPin, HIGH);     						// de-assert CS to SAM to end the transaction and tell SAM the transfer is complete
 	hspi.endTransaction();
 
 	// If we deferred the command until after sending the response (e.g. because it may take some time to execute), complete it now
@@ -640,9 +681,22 @@ void ProcessRequest()
 			break;
 
 		case NetworkCommand::networkStop:					// disconnect from an access point, or close down our own access point
-			Connection::TerminateAll();
-			//TODO close all sockets if we were connected
-			WiFi.disconnect();
+			Connection::TerminateAll();						// terminate all connections
+			Listener::StopListening(0);						// stop listening on all ports
+			switch (currentState)
+			{
+			case WiFiState::connected:
+			case WiFiState::connecting:
+				WiFi.disconnect();
+				break;
+
+			case WiFiState::runningAsAccessPoint:
+				WiFi.softAPdisconnect(true);
+				break;
+
+			default:
+				break;
+			}
 			delay(100);
 			currentState = WiFiState::idle;
 			break;
@@ -703,13 +757,16 @@ void loop()
 		{
 			prevLastError = nullptr;
 		}
-		else if (lastError != prevLastError)
+		else
 		{
-			prevLastError = lastError;
-			debugPrint("Signalling error: ");
-			debugPrintln(lastError);
+			if (lastError != prevLastError)
+			{
+				prevLastError = lastError;
+				debugPrint("Signalling error: ");
+				debugPrintln(lastError);
+			}
 			digitalWrite(EspReqTransferPin, LOW);
-			delayMicroseconds(1);						// force a low to high transition
+			delayMicroseconds(2);						// force a low to high transition to signal that an error message is available
 		}
 	}
 
