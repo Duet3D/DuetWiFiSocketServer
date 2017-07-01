@@ -32,7 +32,8 @@ extern "C"
 
 #define array _ecv_array
 
-const uint32_t MaxConnectTime = 30 * 1000;		// how long we wait for WiFi to connect in milliseconds
+// DC lengthened the timeout at version 1.19beta8 because we now detect most connection failures without timing out
+const uint32_t MaxConnectTime = 60 * 1000;		// how long we wait for WiFi to connect in milliseconds
 
 const int DefaultWiFiChannel = 6;
 
@@ -135,21 +136,55 @@ void ConnectPoll()
 {
 	if (currentState == WiFiState::connecting)
 	{
-		if (WiFi.status() == WL_CONNECTED)
+		// The Arduino WiFi.status() call is fairly useless here because it discards too much information, so use the SDK API call instead
+		const char *error = nullptr;
+		const station_status_t status = wifi_station_get_connect_status();
+		switch (status)
 		{
+		case STATION_IDLE:
+			error = "Unexpected WiFi state 'idle'";
+			break;
+
+		case STATION_CONNECTING:
+			if (millis() - connectStartTime >= MaxConnectTime)
+			{
+				error = "Timed out";
+			}
+			break;
+
+		case STATION_WRONG_PASSWORD:
+			error = "Wrong password";
+			break;
+
+		case STATION_NO_AP_FOUND:
+			error = "Didn't find access point";
+			break;
+
+		case STATION_CONNECT_FAIL:
+			error = "Failed";
+			break;
+
+		case STATION_GOT_IP:
 			currentState = WiFiState::connected;
 			digitalWrite(EspReqTransferPin, LOW);				// force a status update when complete
 			debugPrintln("Connected to AP");
+			break;
+
+		default:
+			error = "Unknown WiFi status";
+			break;
 		}
-		else if (millis() - connectStartTime >= MaxConnectTime)
+
+		if (error != nullptr)
 		{
 			WiFi.mode(WIFI_OFF);
-			delay(10);
 			currentState = WiFiState::idle;
-			strcpy(lastConnectError, "failed to connect to access point ");
+
+			strcpy(lastConnectError, error);
+			strncat(lastConnectError, " while trying to connect to ", ARRAY_SIZE(lastConnectError) - strlen(lastConnectError) - 1);
 			strncat(lastConnectError, currentSsid, ARRAY_SIZE(lastConnectError) - strlen(lastConnectError) - 1);
 			lastError = lastConnectError;
-			debugPrintln("timed out trying to connect to AP");
+			debugPrintln("failed to connect to AP");
 			digitalWrite(EspReqTransferPin, LOW);				// force a status update when complete
 		}
 	}
@@ -716,14 +751,19 @@ void setup()
 {
 	// Enable serial port for debugging
 	Serial.begin(115200);
+#ifdef DEBUG
 	Serial.setDebugOutput(true);
-	delay(20);
+#endif
+
+	WiFi.mode(WIFI_OFF);
+	WiFi.persistent(false);
+	WiFi.setAutoConnect(false);
+	WiFi.setAutoReconnect(true);
 
 	// Reserve some flash space for use as EEPROM. The maximum EEPROM supported by the core is API_FLASH_SEC_SIZE (4Kb).
 	const size_t eepromSizeNeeded = (MaxRememberedNetworks + 1) * sizeof(WirelessConfigurationData);
 	static_assert(eepromSizeNeeded <= SPI_FLASH_SEC_SIZE, "Insufficient EEPROM");
 	EEPROM.begin(eepromSizeNeeded);
-	delay(20);
 
 	// Set up the SPI subsystem
     pinMode(SamTfrReadyPin, INPUT);
