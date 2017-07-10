@@ -144,7 +144,9 @@ struct NetworkStatusResponse
 	uint32_t freeHeap;				// free heap memory in bytes
 	uint32_t resetReason;
 	uint32_t flashSize;
-	int32_t rssi;					// received signal strength (only if operating as a wifi client)
+	int8_t rssi;					// received signal strength (if operating as a wifi client)
+	uint8_t numClients;				// the number of connected clients (if operating as an AP)
+	uint16_t spare;					// unused
 	uint16_t vcc;					// ESP Vcc voltage according to its ADC
     uint8_t macAddress[6];			// MAC address
 	char versionText[16];			// WiFi firmware version
@@ -156,11 +158,10 @@ struct NetworkStatusResponse
 //		4 bytes of reset reason
 //		4 bytes of flash chip size
 //		4 bytes of RSSI (added for info version 2)
-//		2 bytes of operating state (1 = client, 2 = access point)
 //		2 bytes of ESP8266 Vcc according to its ADC
 //		16 chars of WiFi firmware version
-//		64 chars of host name, null terminated
 //		32 chars of ssid (either ssid we are connected to or our own AP name), null terminated
+//		64 chars of host name, null terminated
 
 // State of a connection
 // The table of state names in Connection.cpp must be kept in step with this
@@ -208,6 +209,6 @@ const int32_t ResponseBadParameter = -11;
 const int32_t ResponseUnknownError = -12;
 
 const size_t MaxRememberedNetworks = 20;
-static_assert((MaxRememberedNetworks * (SsidLength + 1)) + 1 <= MaxDataLength, "Too many remembered networks");
+static_assert(((MaxRememberedNetworks + 1) * (SsidLength + 1)) + 1 <= MaxDataLength, "Too many remembered networks");
 
 #endif /* SRC_MESSAGEFORMATS_H_ */

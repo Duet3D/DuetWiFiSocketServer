@@ -22,6 +22,7 @@
 #include "include/MessageFormats.h"
 #include "Connection.h"
 #include "Listener.h"
+#include "Misc.h"
 
 extern "C"
 {
@@ -57,34 +58,31 @@ static uint32_t connectStartTime;
 
 static uint32_t transferBuffer[NumDwords(MaxDataLength + 1)];
 
-// Look up a SSID in our remembered network list, return true if found
-// This always overwrites ssidData
-bool RetrieveSsidData(const char *ssid, WirelessConfigurationData& ssidData, size_t *index = nullptr)
+// Look up a SSID in our remembered network list, return pointer to it if found
+const WirelessConfigurationData *RetrieveSsidData(const char *ssid, int *index = nullptr)
 {
 	for (size_t i = 1; i <= MaxRememberedNetworks; ++i)
 	{
-		EEPROM.get(i * sizeof(WirelessConfigurationData), ssidData);
-		if (strncmp(ssid, ssidData.ssid, sizeof(ssidData.ssid)) == 0)
+		const WirelessConfigurationData *wp = EEPROM.getPtr<WirelessConfigurationData>(i * sizeof(WirelessConfigurationData));
+		if (wp != nullptr && strncmp(ssid, wp->ssid, sizeof(wp->ssid)) == 0)
 		{
 			if (index != nullptr)
 			{
 				*index = i;
 			}
-			return true;
+			return wp;
 		}
 	}
-	memset(&ssidData, 0, sizeof(ssidData));			// clear the last password out of RAM for security
-	return false;
+	return nullptr;
 }
 
 // Find an empty entry in the table of known networks
-bool FindEmptySsidEntry(size_t *index)
+bool FindEmptySsidEntry(int *index)
 {
 	for (size_t i = 1; i <= MaxRememberedNetworks; ++i)
 	{
-		WirelessConfigurationData tempData;
-		EEPROM.get(i * sizeof(WirelessConfigurationData), tempData);
-		if (tempData.ssid[0] == 0xFF)
+		const WirelessConfigurationData *wp = EEPROM.getPtr<WirelessConfigurationData>(i * sizeof(WirelessConfigurationData));
+		if (wp != nullptr && wp->ssid[0] == 0xFF)
 		{
 			*index = i;
 			return true;
@@ -116,16 +114,17 @@ void FactoryReset()
 	EEPROM.commit();
 }
 
-// Try to connect using the saved SSID and password, returning true if successful
+// Try to connect using the specified SSID and password
 void ConnectToAccessPoint(const WirelessConfigurationData& apData)
-pre(currentState == NetworkState::disabled)
+pre(currentState == NetworkState::idle)
 {
-	strncpy(currentSsid, apData.ssid, ARRAY_SIZE(currentSsid) - 1);
-	currentSsid[ARRAY_SIZE(currentSsid) - 1] = 0;
+	SafeStrncpy(currentSsid, apData.ssid, ARRAY_SIZE(currentSsid));
 
-	wifi_station_set_hostname(webHostName);     				// must do this before calling WiFi.begin()
-	WiFi.config(IPAddress(apData.ip), IPAddress(apData.gateway), IPAddress(apData.netmask), IPAddress(), IPAddress());
 	WiFi.mode(WIFI_STA);
+	wifi_station_set_hostname(webHostName);     				// must do this before calling WiFi.begin()
+	WiFi.setAutoConnect(false);
+	WiFi.setAutoReconnect(true);
+	WiFi.config(IPAddress(apData.ip), IPAddress(apData.gateway), IPAddress(apData.netmask), IPAddress(), IPAddress());
 	WiFi.begin(apData.ssid, apData.password);
 
 	currentState = WiFiState::connecting;
@@ -181,8 +180,8 @@ void ConnectPoll()
 			currentState = WiFiState::idle;
 
 			strcpy(lastConnectError, error);
-			strncat(lastConnectError, " while trying to connect to ", ARRAY_SIZE(lastConnectError) - strlen(lastConnectError) - 1);
-			strncat(lastConnectError, currentSsid, ARRAY_SIZE(lastConnectError) - strlen(lastConnectError) - 1);
+			SafeStrncat(lastConnectError, " while trying to connect to ", ARRAY_SIZE(lastConnectError));
+			SafeStrncat(lastConnectError, currentSsid, ARRAY_SIZE(lastConnectError));
 			lastError = lastConnectError;
 			debugPrintln("failed to connect to AP");
 			digitalWrite(EspReqTransferPin, LOW);				// force a status update when complete
@@ -191,8 +190,9 @@ void ConnectPoll()
 }
 
 void StartClient(const char * array ssid)
+pre(currentState == WiFiState::idle)
 {
-	WirelessConfigurationData ssidData;
+	const WirelessConfigurationData *ssidData = nullptr;
 
 	if (ssid == nullptr || ssid[0] == 0)
 	{
@@ -209,26 +209,34 @@ void StartClient(const char * array ssid)
 		int8_t strongestNetwork = -1;
 		for (int8_t i = 0; i < num_ssids; ++i)
 		{
-			if ((strongestNetwork < 0 || WiFi.RSSI(i) > WiFi.RSSI(strongestNetwork)) && RetrieveSsidData(WiFi.SSID(i).c_str(), ssidData))
+			if (strongestNetwork < 0 || WiFi.RSSI(i) > WiFi.RSSI(strongestNetwork))
 			{
-				strongestNetwork = i;
+				const WirelessConfigurationData *wp = RetrieveSsidData(WiFi.SSID(i).c_str(), nullptr);
+				if (wp != nullptr)
+				{
+					strongestNetwork = i;
+					ssidData = wp;
+				}
 			}
 		}
 		if (strongestNetwork < 0)
 		{
 			lastError = "no known networks found";
-			currentState = WiFiState::idle;
 			return;
 		}
 	}
-	else if (!RetrieveSsidData(ssid, ssidData))
+	else
 	{
-		lastError = "no data found for requested SSID";
-		currentState = WiFiState::idle;
-		return;
+		ssidData = RetrieveSsidData(ssid, nullptr);
+		if (ssidData == nullptr)
+		{
+			lastError = "no data found for requested SSID";
+			return;
+		}
 	}
 
-	ConnectToAccessPoint(ssidData);
+	// ssidData contains the details of the strongest known access point
+	ConnectToAccessPoint(*ssidData);
 }
 
 bool CheckValidString(const char * array s, size_t n, bool isSsid)
@@ -273,8 +281,7 @@ void StartAccessPoint()
 
 	if (ValidApData(apData))
 	{
-		strncpy(currentSsid, apData.ssid, ARRAY_SIZE(currentSsid) - 1);
-		currentSsid[ARRAY_SIZE(currentSsid) - 1] = 0;
+		SafeStrncpy(currentSsid, apData.ssid, ARRAY_SIZE(currentSsid));
 		bool ok = WiFi.mode(WIFI_AP);
 		if (ok)
 		{
@@ -293,8 +300,7 @@ void StartAccessPoint()
 				lastError = "Failed to start DNS";
 			}
 			debugPrintln("AP started");
-			strncpy(currentSsid, apData.ssid, ARRAY_SIZE(currentSsid) - 1);
-			currentSsid[ARRAY_SIZE(currentSsid) - 1] = 0;
+			SafeStrncpy(currentSsid, apData.ssid, ARRAY_SIZE(currentSsid));
 			delay(100);		// trying this to see if it helps
 			currentState = WiFiState::runningAsAccessPoint;
 		}
@@ -323,40 +329,45 @@ static union
 	uint32_t asDwords[headerDwords];	// to force alignment
 } messageHeaderOut;
 
+// Rebuild the MDNS server to advertise a single service
+void AdvertiseService(int service, uint16_t port)
+{
+	static int currentService = -1;
+	static const char * const serviceNames[] = { "http", "tcp", "ftp" };
+
+	if (service != currentService)
+	{
+		currentService = service;
+		MDNS.deleteServices();
+		if (service >= 0 && service < (int)ARRAY_SIZE(serviceNames))
+		{
+			const char* serviceName = serviceNames[service];
+			MDNS.addService(serviceName, "tcp", port);
+			MDNS.addServiceTxt(serviceName, "tcp", "product", "DuetWiFi");
+			MDNS.addServiceTxt(serviceName, "tcp", "version", firmwareVersion);
+		}
+	}
+}
+
 // Rebuild the mDNS services
 void RebuildServices()
 {
-	MDNS.deleteServices();
-
-	// Unfortunately the official ESP8266 mDNS library only reports one service.
-	// I (chrishamm) tried to use the old mDNS responder, which is also capable of sending
-	// mDNS broadcasts, but the packets it generates are broken and thus not of use.
-	const uint16_t httpPort = Listener::GetPortByProtocol(0);
-	if (httpPort != 0)
+	if (currentState == WiFiState::connected)		// MDNS server only works in station mode
 	{
-		MDNS.addService("http", "tcp", httpPort);
-		MDNS.addServiceTxt("http", "tcp", "product", "DuetWiFi");
-		MDNS.addServiceTxt("http", "tcp", "version", firmwareVersion);
-	}
-	else
-	{
-		const uint16_t ftpPort = Listener::GetPortByProtocol(1);
-		if (ftpPort != 0)
+		// Unfortunately the official ESP8266 mDNS library only reports one service.
+		// I (chrishamm) tried to use the old mDNS responder, which is also capable of sending
+		// mDNS broadcasts, but the packets it generates are broken and thus not of use.
+		for (int service = 0; service < 3; ++service)
 		{
-			MDNS.addService("ftp", "tcp", ftpPort);
-			MDNS.addServiceTxt("ftp", "tcp", "product", "DuetWiFi");
-			MDNS.addServiceTxt("ftp", "tcp", "version", firmwareVersion);
-		}
-		else
-		{
-			const uint16_t telnetPort = Listener::GetPortByProtocol(2);
-			if (telnetPort != 0)
+			const uint16_t port = Listener::GetPortByProtocol(service);
+			if (port != 0)
 			{
-				MDNS.addService("telnet", "tcp", telnetPort);
-				MDNS.addServiceTxt("telnet", "tcp", "product", "DuetWiFi");
-				MDNS.addServiceTxt("telnet", "tcp", "version", firmwareVersion);
+				AdvertiseService(service, port);
+				return;
 			}
 		}
+
+		AdvertiseService(-1, 0);		// no services to advertise
 	}
 }
 
@@ -431,21 +442,25 @@ void ProcessRequest()
 
 		case NetworkCommand::networkGetStatus:				// get the network connection status
 			{
+				const bool runningAsAp = (currentState == WiFiState::runningAsAccessPoint);
+				const bool runningAsStation = (currentState == WiFiState::connected);
 				NetworkStatusResponse * const response = reinterpret_cast<NetworkStatusResponse*>(transferBuffer);
-				response->ipAddress = (currentState == WiFiState::runningAsAccessPoint)
+				response->ipAddress = (runningAsAp)
 										? static_cast<uint32_t>(WiFi.softAPIP())
-										: (currentState == WiFiState::connected)
+										: (runningAsStation)
 										  ? static_cast<uint32_t>(WiFi.localIP())
 											  : 0;
 				response->freeHeap = ESP.getFreeHeap();
 				response->resetReason = ESP.getResetInfoPtr()->reason;
 				response->flashSize = ESP.getFlashChipRealSize();
-				response->rssi = WiFi.RSSI();
+				response->rssi = (runningAsStation) ? wifi_station_get_rssi() : 0;
+				response->numClients = (runningAsAp) ? wifi_softap_get_station_num() : 0;
+				response->spare = 0;
 				response->vcc = ESP.getVcc();
-			    wifi_get_macaddr(STATION_IF, response->macAddress);
-				strncpy(response->versionText, firmwareVersion, sizeof(response->versionText));
-				strncpy(response->hostName, webHostName, sizeof(response->hostName));
-				strncpy(response->ssid, currentSsid, sizeof(response->ssid));
+			    wifi_get_macaddr((runningAsAp) ? SOFTAP_IF : STATION_IF, response->macAddress);
+			    SafeStrncpy(response->versionText, firmwareVersion, sizeof(response->versionText));
+			    SafeStrncpy(response->hostName, webHostName, sizeof(response->hostName));
+			    SafeStrncpy(response->ssid, currentSsid, sizeof(response->ssid));
 				SendResponse(sizeof(NetworkStatusResponse));
 			}
 			break;
@@ -455,26 +470,24 @@ void ProcessRequest()
 			if (messageHeaderIn.hdr.dataLength == sizeof(WirelessConfigurationData))
 			{
 				messageHeaderIn.hdr.param32 = hspi.transfer32(ResponseEmpty);
-				WirelessConfigurationData localClientData;
 				hspi.transferDwords(nullptr, transferBuffer, SIZE_IN_DWORDS(WirelessConfigurationData));
 				const WirelessConfigurationData * const receivedClientData = reinterpret_cast<const WirelessConfigurationData *>(transferBuffer);
-				size_t index;
-				bool found;
+				int index;
 				if (messageHeaderIn.hdr.command == NetworkCommand::networkConfigureAccessPoint)
 				{
 					index = 0;
-					found = true;
 				}
 				else
 				{
-					found = RetrieveSsidData(receivedClientData->ssid, localClientData, &index);
-					if (!found)
+					index = -1;
+					(void)RetrieveSsidData(receivedClientData->ssid, &index);
+					if (index < 0)
 					{
-						found = FindEmptySsidEntry(&index);
+						(void)FindEmptySsidEntry(&index);
 					}
 				}
 
-				if (found)
+				if (index >= 0)
 				{
 					EEPROM.put(index * sizeof(WirelessConfigurationData), *receivedClientData);
 					EEPROM.commit();
@@ -496,10 +509,10 @@ void ProcessRequest()
 				messageHeaderIn.hdr.param32 = hspi.transfer32(ResponseEmpty);
 				hspi.transferDwords(nullptr, transferBuffer, NumDwords(SsidLength));
 
-				WirelessConfigurationData ssidData;
-				size_t index;
-				if (RetrieveSsidData(reinterpret_cast<char*>(transferBuffer), ssidData, &index))
+				int index;
+				if (RetrieveSsidData(reinterpret_cast<char*>(transferBuffer), &index) != nullptr)
 				{
+					WirelessConfigurationData ssidData;
 					memset(&ssidData, 0xFF, sizeof(ssidData));
 					EEPROM.put(index * sizeof(WirelessConfigurationData), ssidData);
 					EEPROM.commit();
@@ -604,7 +617,7 @@ void ProcessRequest()
 					lastError = "Listen failed";
 					debugPrintln("Listen failed");
 				}
-				RebuildServices();
+//				RebuildServices();
 			}
 			break;
 
@@ -718,11 +731,12 @@ void ProcessRequest()
 		case NetworkCommand::networkStop:					// disconnect from an access point, or close down our own access point
 			Connection::TerminateAll();						// terminate all connections
 			Listener::StopListening(0);						// stop listening on all ports
+			RebuildServices();								// stop the MDNS server (this will be the effect after terminating al listeners)
 			switch (currentState)
 			{
 			case WiFiState::connected:
 			case WiFiState::connecting:
-				WiFi.disconnect();
+				WiFi.disconnect(true);
 				break;
 
 			case WiFiState::runningAsAccessPoint:
@@ -757,8 +771,6 @@ void setup()
 
 	WiFi.mode(WIFI_OFF);
 	WiFi.persistent(false);
-	WiFi.setAutoConnect(false);
-	WiFi.setAutoReconnect(true);
 
 	// Reserve some flash space for use as EEPROM. The maximum EEPROM supported by the core is API_FLASH_SEC_SIZE (4Kb).
 	const size_t eepromSizeNeeded = (MaxRememberedNetworks + 1) * sizeof(WirelessConfigurationData);
