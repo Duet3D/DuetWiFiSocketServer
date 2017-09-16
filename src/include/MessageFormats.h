@@ -119,7 +119,9 @@ enum class WiFiState : uint8_t
 	idle = 1,						// neither connected nor running as an access point
 	runningAsAccessPoint = 2,
 	connecting = 3,
-	connected = 4
+	connected = 4,
+	autoReconnecting = 5,
+	reconnecting = 6
 };
 
 // Message header sent from the ESP to the SAM

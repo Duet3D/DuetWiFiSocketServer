@@ -33,8 +33,8 @@ extern "C"
 
 #define array _ecv_array
 
-// DC lengthened the timeout at version 1.19beta8 because we now detect most connection failures without timing out
-const uint32_t MaxConnectTime = 60 * 1000;		// how long we wait for WiFi to connect in milliseconds
+const uint32_t MaxConnectTime = 40 * 1000;		// how long we wait for WiFi to connect in milliseconds
+const uint32_t StatusReportMillis = 200;
 
 const int DefaultWiFiChannel = 6;
 
@@ -44,19 +44,24 @@ char webHostName[HostNameLength + 1] = "Duet-WiFi";
 
 DNSServer dns;
 
-const char* lastError = nullptr;
-const char* prevLastError = nullptr;
+static const char* lastError = nullptr;
+static const char* prevLastError = nullptr;
+static bool connectErrorChanged = false;
 
-char lastConnectError[100];
+static char lastConnectError[100];
 
-WiFiState currentState = WiFiState::idle;
+static WiFiState currentState = WiFiState::idle,
+				prevCurrentState = WiFiState::disabled,
+				lastReportedState = WiFiState::disabled;
 
 ADC_MODE(ADC_VCC);          // need this for the ESP.getVcc() call to work
 
 static HSPIClass hspi;
 static uint32_t connectStartTime;
-
+static uint32_t lastStatusReportTime;
 static uint32_t transferBuffer[NumDwords(MaxDataLength + 1)];
+
+static const WirelessConfigurationData *ssidData = nullptr;
 
 // Look up a SSID in our remembered network list, return pointer to it if found
 const WirelessConfigurationData *RetrieveSsidData(const char *ssid, int *index = nullptr)
@@ -115,7 +120,7 @@ void FactoryReset()
 }
 
 // Try to connect using the specified SSID and password
-void ConnectToAccessPoint(const WirelessConfigurationData& apData)
+void ConnectToAccessPoint(const WirelessConfigurationData& apData, bool isRetry)
 pre(currentState == NetworkState::idle)
 {
 	SafeStrncpy(currentSsid, apData.ssid, ARRAY_SIZE(currentSsid));
@@ -127,17 +132,29 @@ pre(currentState == NetworkState::idle)
 	WiFi.config(IPAddress(apData.ip), IPAddress(apData.gateway), IPAddress(apData.netmask), IPAddress(), IPAddress());
 	WiFi.begin(apData.ssid, apData.password);
 
-	currentState = WiFiState::connecting;
-	connectStartTime = millis();
+	if (isRetry)
+	{
+		currentState = WiFiState::reconnecting;
+	}
+	else
+	{
+		currentState = WiFiState::connecting;
+		connectStartTime = millis();
+	}
 }
 
 void ConnectPoll()
 {
-	if (currentState == WiFiState::connecting)
+	// The Arduino WiFi.status() call is fairly useless here because it discards too much information, so use the SDK API call instead
+	const station_status_t status = wifi_station_get_connect_status();
+	const char *error = nullptr;
+	bool retry = false;
+
+	switch (currentState)
 	{
-		// The Arduino WiFi.status() call is fairly useless here because it discards too much information, so use the SDK API call instead
-		const char *error = nullptr;
-		const station_status_t status = wifi_station_get_connect_status();
+	case WiFiState::connecting:
+	case WiFiState::reconnecting:
+		// We are trying to connect or reconnect, so check for success or failure
 		switch (status)
 		{
 		case STATION_IDLE:
@@ -157,42 +174,126 @@ void ConnectPoll()
 
 		case STATION_NO_AP_FOUND:
 			error = "Didn't find access point";
+			retry = (currentState == WiFiState::reconnecting);
 			break;
 
 		case STATION_CONNECT_FAIL:
 			error = "Failed";
+			retry = (currentState == WiFiState::reconnecting);
 			break;
 
 		case STATION_GOT_IP:
+			if (currentState == WiFiState::reconnecting)
+			{
+				lastError = "Reconnect succeeded";
+			}
 			currentState = WiFiState::connected;
-			digitalWrite(EspReqTransferPin, LOW);				// force a status update when complete
 			debugPrintln("Connected to AP");
 			break;
 
 		default:
-			error = "Unknown WiFi status";
+			error = "Unknown WiFi state";
 			break;
 		}
 
 		if (error != nullptr)
 		{
-			WiFi.mode(WIFI_OFF);
-			currentState = WiFiState::idle;
-
 			strcpy(lastConnectError, error);
 			SafeStrncat(lastConnectError, " while trying to connect to ", ARRAY_SIZE(lastConnectError));
 			SafeStrncat(lastConnectError, currentSsid, ARRAY_SIZE(lastConnectError));
 			lastError = lastConnectError;
+			connectErrorChanged = true;
 			debugPrintln("failed to connect to AP");
-			digitalWrite(EspReqTransferPin, LOW);				// force a status update when complete
+
+			if (!retry)
+			{
+				WiFi.mode(WIFI_OFF);
+				currentState = WiFiState::idle;
+			}
 		}
+		break;
+
+	case WiFiState::connected:
+		if (status != STATION_GOT_IP)
+		{
+			// We have just lost the connection
+			connectStartTime = millis();						// start the auto reconnect timer
+
+			switch (status)
+			{
+			case STATION_CONNECTING:							// auto reconnecting
+				error = "auto reconnecting";
+				currentState = WiFiState::autoReconnecting;
+				break;
+
+			case STATION_IDLE:
+				error = "state 'idle'";
+				retry = true;
+				break;
+
+			case STATION_WRONG_PASSWORD:
+				error = "state 'wrong password'";
+				currentState = WiFiState::idle;
+				break;
+
+			case STATION_NO_AP_FOUND:
+				error = "state 'no AP found'";
+				retry = true;
+				break;
+
+			case STATION_CONNECT_FAIL:
+				error = "state 'fail'";
+				retry = true;
+				break;
+
+			default:
+				error = "unknown WiFi state";
+				currentState = WiFiState::idle;
+				break;
+			}
+
+			strcpy(lastConnectError, "Lost connection, ");
+			SafeStrncat(lastConnectError, error, ARRAY_SIZE(lastConnectError));
+			lastError = lastConnectError;
+			connectErrorChanged = true;
+			debugPrintln("Lost connection to AP");
+			break;
+		}
+		break;
+
+	case WiFiState::autoReconnecting:
+		if (status == STATION_GOT_IP)
+		{
+			lastError = "Auto reconnect succeeded";
+			currentState = WiFiState::connected;
+		}
+		else if (status != STATION_CONNECTING && lastError == nullptr)
+		{
+			lastError = "Auto reconnect failed, trying manual reconnect";
+			connectStartTime = millis();						// start the manual reconnect timer
+			retry = true;
+		}
+		else if (millis() - connectStartTime >= MaxConnectTime)
+		{
+			lastError = "Timed out trying to auto-reconnect";
+			retry = true;
+		}
+		break;
+
+	default:
+		break;
+	}
+
+	if (retry)
+	{
+		ConnectToAccessPoint(*ssidData, true);
 	}
 }
 
 void StartClient(const char * array ssid)
 pre(currentState == WiFiState::idle)
 {
-	const WirelessConfigurationData *ssidData = nullptr;
+	ssidData = nullptr;
 
 	if (ssid == nullptr || ssid[0] == 0)
 	{
@@ -236,7 +337,7 @@ pre(currentState == WiFiState::idle)
 	}
 
 	// ssidData contains the details of the strongest known access point
-	ConnectToAccessPoint(*ssidData);
+	ConnectToAccessPoint(*ssidData, false);
 }
 
 bool CheckValidString(const char * array s, size_t n, bool isSsid)
@@ -389,7 +490,6 @@ void ProcessRequest()
 	// Set up our own header
 	messageHeaderOut.hdr.formatVersion = MyFormatVersion;
 	messageHeaderOut.hdr.state = currentState;
-
 	bool deferCommand = false;
 
 	// Begin the transaction
@@ -598,6 +698,7 @@ void ProcessRequest()
 				}
 				lastError = nullptr;
 			}
+			lastReportedState = currentState;
 			break;
 
 		case NetworkCommand::networkListen:				// listen for incoming connections
@@ -716,7 +817,6 @@ void ProcessRequest()
 	if (deferCommand)
 	{
 		// The following functions must set up lastError if an error occurs.
-		digitalWrite(EspReqTransferPin, LOW);				// force a status update when complete
 		lastError = nullptr;								// assume no error
 		switch (messageHeaderIn.hdr.command)
 		{
@@ -795,31 +895,31 @@ void setup()
     netbios_init();
     lastError = nullptr;
     debugPrintln("Init completed");
+	digitalWrite(EspReqTransferPin, HIGH);				// tell the SAM we are ready to receive a command
+	lastStatusReportTime = millis();
 }
 
 void loop()
 {
 	digitalWrite(EspReqTransferPin, HIGH);				// tell the SAM we are ready to receive a command
+	if (   (lastError != prevLastError || connectErrorChanged || currentState != prevCurrentState)
+		|| ((lastError != nullptr || currentState != lastReportedState) && millis() - lastStatusReportTime > StatusReportMillis)
+	   )
+	{
+		delayMicroseconds(2);							// make sure the pin stays high for long enough for the SAM to see it
+		digitalWrite(EspReqTransferPin, LOW);			// force a low to high transition to signal that an error message is available
+		delayMicroseconds(2);							// make sure it is low enough to create an interrupt when it goes high
+		digitalWrite(EspReqTransferPin, HIGH);			// tell the SAM we are ready to receive a command
+		prevLastError = lastError;
+		prevCurrentState = currentState;
+		connectErrorChanged = false;
+		lastStatusReportTime = millis();
+	}
 
 	// See whether there is a request from the SAM
 	if (digitalRead(SamTfrReadyPin) == HIGH)
 	{
 		ProcessRequest();
-		if (lastError == nullptr)
-		{
-			prevLastError = nullptr;
-		}
-		else
-		{
-			if (lastError != prevLastError)
-			{
-				prevLastError = lastError;
-				debugPrint("Signalling error: ");
-				debugPrintln(lastError);
-			}
-			digitalWrite(EspReqTransferPin, LOW);
-			delayMicroseconds(2);						// force a low to high transition to signal that an error message is available
-		}
 	}
 
 	ConnectPoll();
