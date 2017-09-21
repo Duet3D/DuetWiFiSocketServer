@@ -298,7 +298,7 @@ pre(currentState == WiFiState::idle)
 	if (ssid == nullptr || ssid[0] == 0)
 	{
 		// Auto scan for strongest known network, then try to connect to it
-		int8_t num_ssids = WiFi.scanNetworks(false, true);
+		const int8_t num_ssids = WiFi.scanNetworks(false, true);
 		if (num_ssids < 0)
 		{
 			lastError = "network scan failed";
@@ -518,6 +518,22 @@ void ProcessRequest()
 			break;
 
 		case NetworkCommand::networkStartClient:			// connect to an access point
+			if (currentState == WiFiState::idle)
+			{
+				deferCommand = true;
+				messageHeaderIn.hdr.param32 = hspi.transfer32(ResponseEmpty);
+				if (messageHeaderIn.hdr.dataLength != 0 && messageHeaderIn.hdr.dataLength <= SsidLength + 1)
+				{
+					hspi.transferDwords(nullptr, transferBuffer, NumDwords(messageHeaderIn.hdr.dataLength));
+					reinterpret_cast<char *>(transferBuffer)[messageHeaderIn.hdr.dataLength] = 0;
+				}
+			}
+			else
+			{
+				SendResponse(ResponseWrongState);
+			}
+			break;
+
 		case NetworkCommand::networkStartAccessPoint:		// run as an access point
 			if (currentState == WiFiState::idle)
 			{
@@ -816,12 +832,19 @@ void ProcessRequest()
 	// If we deferred the command until after sending the response (e.g. because it may take some time to execute), complete it now
 	if (deferCommand)
 	{
-		// The following functions must set up lastError if an error occurs.
+		// The following functions must set up lastError if an error occurs
 		lastError = nullptr;								// assume no error
 		switch (messageHeaderIn.hdr.command)
 		{
 		case NetworkCommand::networkStartClient:			// connect to an access point
-			StartClient(nullptr);
+			if (messageHeaderIn.hdr.dataLength == 0 || reinterpret_cast<const char*>(transferBuffer)[0] == 0)
+			{
+				StartClient(nullptr);						// connect to strongest known access point
+			}
+			else
+			{
+				StartClient(reinterpret_cast<const char*>(transferBuffer));		// connect to specified access point
+			}
 			break;
 
 		case NetworkCommand::networkStartAccessPoint:		// run as an access point
@@ -831,7 +854,7 @@ void ProcessRequest()
 		case NetworkCommand::networkStop:					// disconnect from an access point, or close down our own access point
 			Connection::TerminateAll();						// terminate all connections
 			Listener::StopListening(0);						// stop listening on all ports
-			RebuildServices();								// stop the MDNS server (this will be the effect after terminating al listeners)
+			RebuildServices();								// stop the MDNS server (this will be the effect after terminating all listeners)
 			switch (currentState)
 			{
 			case WiFiState::connected:
