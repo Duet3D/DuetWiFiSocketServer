@@ -475,7 +475,7 @@ void RebuildServices()
 // Send a response.
 // 'response' is the number of byes of response if positive, or the error code if negative.
 // Use only to respond to commands which don't include a data block, or when we don't want to read the data block.
-void SendResponse(int32_t response)
+void ICACHE_RAM_ATTR SendResponse(int32_t response)
 {
 	(void)hspi.transfer32(response);
 	if (response > 0)
@@ -485,7 +485,7 @@ void SendResponse(int32_t response)
 }
 
 // This is called when the SAM is asking to transfer data
-void ProcessRequest()
+void ICACHE_RAM_ATTR ProcessRequest()
 {
 	// Set up our own header
 	messageHeaderOut.hdr.formatVersion = MyFormatVersion;
@@ -571,6 +571,7 @@ void ProcessRequest()
 				response->flashSize = ESP.getFlashChipRealSize();
 				response->rssi = (runningAsStation) ? wifi_station_get_rssi() : 0;
 				response->numClients = (runningAsAp) ? wifi_softap_get_station_num() : 0;
+				response->sleepMode = (uint8_t)wifi_get_sleep_type() + 1;
 				response->spare = 0;
 				response->vcc = ESP.getVcc();
 			    wifi_get_macaddr((runningAsAp) ? SOFTAP_IF : STATION_IF, response->macAddress);

@@ -46,34 +46,17 @@ public:
   void setHwCs(bool use);
   void setBitOrder(uint8_t bitOrder);  
   void setDataMode(uint8_t dataMode);
+  void setDataBits(uint16_t bits);
   void setFrequency(uint32_t freq);
   void setClockDivider(uint32_t clockDiv);
-  void beginTransaction(SPISettings settings);
   void beginTransaction();
-  uint8_t transfer(uint8_t data);
-  uint16_t transfer16(uint16_t data);
   uint32_t transfer32(uint32_t data);
-  void write(uint8_t data);
-  void write16(uint16_t data);
-  void write16(uint16_t data, bool msb);
-  void write32(uint32_t data);
-  void write32(uint32_t data, bool msb);
-//  void writeDword(uint32_t data);
-  void writeBytes(const uint8_t * data, uint32_t size);
-  void writeDwords(const uint32_t * data, uint32_t size);
-  void writePattern(const uint8_t * data, uint8_t size, uint32_t repeat);
-  void transferBytes(const uint8_t * out, uint8_t * in, uint32_t size);
   void transferDwords(const uint32_t * out, uint32_t * in, uint32_t size);
   void endTransaction(void);
+
 private:
   bool useHwCs;
-  void writeBytes_(const uint8_t * data, uint8_t size);
-  void writeDwords_(const uint32_t * data, uint8_t size);
-  void writePattern_(const uint8_t * data, uint8_t size, uint8_t repeat);
-  void transferBytes_(const uint8_t * out, uint8_t * in, uint8_t size);
   void transferDwords_(const uint32_t * out, uint32_t * in, uint8_t size);
-public:
-  void setDataBits(uint16_t bits);
 };
 
 #endif

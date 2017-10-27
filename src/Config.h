@@ -3,7 +3,7 @@
 #ifndef CONFIG_H_INCLUDED
 #define CONFIG_H_INCLUDED
 
-const char* const firmwareVersion = "1.20alpha1";
+const char* const firmwareVersion = "1.20beta2";
 
 // Define the maximum length (bytes) of file upload data per SPI packet. Use a multiple of the SD card file or cluster size for efficiency.
 // ************ This must be kept in step with the corresponding value in RepRapFirmwareWiFi *************

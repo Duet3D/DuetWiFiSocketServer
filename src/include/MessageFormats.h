@@ -148,7 +148,8 @@ struct NetworkStatusResponse
 	uint32_t flashSize;
 	int8_t rssi;					// received signal strength (if operating as a wifi client)
 	uint8_t numClients;				// the number of connected clients (if operating as an AP)
-	uint16_t spare;					// unused
+	uint8_t sleepMode;				// the wifi sleep mode
+	uint8_t spare;					// unused, set to 0 for future compatibility
 	uint16_t vcc;					// ESP Vcc voltage according to its ADC
     uint8_t macAddress[6];			// MAC address
 	char versionText[16];			// WiFi firmware version

@@ -34,6 +34,7 @@ EXTERN(_KernelExceptionVector)
 EXTERN(_NMIExceptionVector)
 EXTERN(_UserExceptionVector)
 PROVIDE(_memmap_vecbase_reset = 0x40000000);
+
 /* Various memory-map dependent cache attribute settings: */
 _memmap_cacheattr_wb_base = 0x00000110;
 _memmap_cacheattr_wt_base = 0x00000110;
@@ -93,6 +94,8 @@ SECTIONS
     *(.sdata2.*)
     *(.gnu.linkonce.s2.*)
     *(.jcr)
+     . = ALIGN(4);
+    _Pri_3_HandlerAddress = ABSOLUTE(.);
     _data_end = ABSOLUTE(.);
   } >dram0_0_seg :dram0_0_phdr
 
@@ -165,20 +168,23 @@ SECTIONS
   .irom0.text : ALIGN(4)
   {
     _irom0_text_start = ABSOLUTE(.);
-    /* *.c.o( EXCLUDE_FILE (umm_malloc.c.o) .literal*, \
-           EXCLUDE_FILE (umm_malloc.c.o) .text*) */
-    /* *.cpp.o(.literal*, .text*) */
-	*HSPI.o(.literal*, .text*)
-	*SocketServer.o(.literal*, .text*)
-	*PooledStrings.o(.literal*, .text*)
-	*Connection.o(.literal*, .text*)
-	*Listener.o(.literal*, .text*)
-	*libCoreESP8266.a:(.literal .text .literal* .text*)
+    *(.ver_number)
+    *.c.o(.literal .text .literal.* .text.*)
+    *.cpp.o(.literal .text .literal.* .text.*)
     *libm.a:(.literal .text .literal.* .text.*)
     *libgcc.a:_umoddi3.o(.literal .text)
     *libgcc.a:_udivdi3.o(.literal .text)
     *libsmartconfig.a:(.literal .text .literal.* .text.*)
-    *(.irom0.literal .irom.literal .irom.text.literal .irom0.text .irom.text .irom.text.*)
+ 	*libCoreESP8266.a:(.literal .text .literal.* .text.*)
+ 	*libLwipESP8266.a:(.literal .text .literal.* .text.*)
+	*Connection.o(.literal*, .text*)
+	*HSPI.o(.literal*, .text*)
+	*Listener.o(.literal*, .text*)
+	*Misc.o(.literal*, .text*)
+	*PooledStrings.o(.literal*, .text*)
+	*SocketServer.o(.literal*, .text*)
+    *(.irom.literal .irom.text.literal .irom.text .irom.text.*)
+    *(.irom0.literal .irom0.text.literal .irom0.text .irom0.text.*)
     _irom0_text_end = ABSOLUTE(.);
     _flash_code_end = ABSOLUTE(.);
   } >irom0_0_seg :irom0_0_phdr
@@ -215,7 +221,6 @@ SECTIONS
     *(.init.literal)
     *(.init)
     *(.literal .text .literal.* .text.* .stub .gnu.warning .gnu.linkonce.literal.* .gnu.linkonce.t.*.literal .gnu.linkonce.t.*)
-	*(.iram.literal)
     *(.iram.text)
     *(.fini.literal)
     *(.fini)
