@@ -256,39 +256,21 @@ void Connection::Report()
 	// The following must be kept in the same order as the declarations in class ConnState
 	static const char* const connStateText[] =
 	{
-		" free",
-		" connecting",			// socket is trying to connect
-		" connected",			// socket is connected
-		" remoteClosed",		// the other end has closed the connection
+		"free",
+		"connecting",			// socket is trying to connect
+		"connected",			// socket is connected
+		"remoteClosed",		// the other end has closed the connection
 
-		" aborted",				// an error has occurred
-		" closePending",		// close this socket when sending is complete
-		" closeReady"			// about to be closed
+		"aborted",				// an error has occurred
+		"closePending",		// close this socket when sending is complete
+		"closeReady"			// about to be closed
 	};
 
 	const unsigned int st = (int)state;
-	if (st < ARRAY_SIZE(connStateText))
-	{
-		debugPrint(connStateText[st]);
-	}
-	else
-	{
-		debugPrint(" unknown");
-	}
+	debugPrintf(" %s", (st < ARRAY_SIZE(connStateText)) ? connStateText[st]: "unknown");
 	if (state != ConnState::free)
 	{
-		debugPrint(" ");
-		debugPrint(localPort);
-		debugPrint(",");
-		debugPrint(remotePort);
-		debugPrint(",");
-		debugPrint(remoteIp & 255);
-		debugPrint(".");
-		debugPrint((remoteIp >> 8) & 255);
-		debugPrint(".");
-		debugPrint((remoteIp >> 16) & 255);
-		debugPrint(".");
-		debugPrint((remoteIp >> 24) & 255);
+		debugPrintf(" %u, %u, %u.%u.%u.%u", localPort, remotePort, remoteIp & 255, (remoteIp >> 8) & 255, (remoteIp >> 16) & 255, (remoteIp >> 24) & 255);
 	}
 #endif
 }
@@ -331,7 +313,7 @@ err_t Connection::ConnRecv(pbuf *p, err_t err)
 		}
 		else if (state == ConnState::closePending)
 		{
-			// We could perhaps call tcp_close here, but better to do it outside the ISR
+			// We could perhaps call tcp_close here, but perhaps better to do it outside the callback
 			state = ConnState::closeReady;
 		}
 	}
@@ -344,6 +326,7 @@ err_t Connection::ConnRecv(pbuf *p, err_t err)
 		pb = p;
 		readIndex = alreadyRead = 0;
 	}
+	debugPrint("Packet rcvd\n");
 	return ERR_OK;
 }
 
@@ -454,7 +437,7 @@ void Connection::FreePbuf()
 		{
 			connectionList[i]->Report();
 		}
-		debugPrintln();
+		debugPrint("\n");
 		connectionsChanged = false;
 	}
 #endif

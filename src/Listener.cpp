@@ -7,6 +7,7 @@
 
 #include "Listener.h"
 #include "Connection.h"
+#include "Config.h"
 
 // C interface functions
 extern "C"
@@ -52,6 +53,7 @@ err_t Listener::Accept(tcp_pcb *pcb)
 		}
 	}
 	tcp_abort(pcb);
+	debugPrint("Refused conn\n");
 	return ERR_ABRT;
 }
 
@@ -117,7 +119,7 @@ void Listener::Stop()
 		Release(p);
 		return false;
 	}
-	p->listeningPcb = tcp_listen(tempPcb);
+	p->listeningPcb = tcp_listen_with_backlog(tempPcb, Backlog);
 	if (p->listeningPcb == nullptr)
 	{
 		tcp_close(tempPcb);

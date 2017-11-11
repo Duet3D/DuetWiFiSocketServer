@@ -3,7 +3,23 @@
 #ifndef CONFIG_H_INCLUDED
 #define CONFIG_H_INCLUDED
 
-const char* const firmwareVersion = "1.20beta2";
+#define NO_WIFI_SLEEP	0
+
+#define VERSION_MAIN	"1.20b8"
+
+#if NO_WIFI_SLEEP
+#define VERSION_SLEEP	"-nosleep"
+#else
+#define VERSION_SLEEP	""
+#endif
+
+#ifdef DEBUG
+#define VERSION_DEBUG	"-D"
+#else
+#define VERSION_DEBUG	""
+#endif
+
+const char* const firmwareVersion = VERSION_MAIN VERSION_DEBUG VERSION_SLEEP;
 
 // Define the maximum length (bytes) of file upload data per SPI packet. Use a multiple of the SD card file or cluster size for efficiency.
 // ************ This must be kept in step with the corresponding value in RepRapFirmwareWiFi *************
@@ -18,14 +34,16 @@ const int SamSSPin = 15;          // GPIO15, output to SAM, SS pin for SPI trans
 const int EspReqTransferPin = 0;  // GPIO0, output, indicates to the SAM that we want to send something
 const int SamTfrReadyPin = 4;     // GPIO4, input, indicates that SAM is ready to execute an SPI transaction
 
+const uint8_t Backlog = 8;
+
 #define ARRAY_SIZE(_x) (sizeof(_x)/sizeof((_x)[0]))
 
 #ifdef DEBUG
-#define debugPrint(_s)		Serial.print(_s)
-#define debugPrintln(_s)	Serial.println(_s)
+#define debugPrint(_str)		ets_printf("%s", _str)
+#define debugPrintf(_format, ...)	ets_printf(_format, __VA_ARGS__)
 #else
-#define debugPrint(_s)		do {} while(false)
-#define debugPrintln(_s)	do {} while(false)
+#define debugPrint(_format)		do {} while(false)
+#define debugPrintf(_format, ...)	do {} while(false)
 #endif
 
 #endif
