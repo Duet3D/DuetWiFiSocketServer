@@ -659,18 +659,44 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			}
 			break;
 
-		case NetworkCommand::networkListSsids:				// list the access points we know about, plus our own access point details
+		case NetworkCommand::networkRetrieveSsidData:	// list the access points we know about, including our own access point details
+			if (dataBufferAvailable < ReducedWirelessConfigurationDataSize)
+			{
+				SendResponse(ResponseBufferTooSmall);
+			}
+			else
+			{
+				char *p = reinterpret_cast<char*>(transferBuffer);
+				for (size_t i = 0; i <= MaxRememberedNetworks && (i + 1) * ReducedWirelessConfigurationDataSize <= dataBufferAvailable; ++i)
+				{
+					const WirelessConfigurationData * const tempData = EEPROM.getPtr<WirelessConfigurationData>(i * sizeof(WirelessConfigurationData));
+					if (tempData->ssid[0] != 0xFF)
+					{
+						memcpy(p, tempData, ReducedWirelessConfigurationDataSize);
+						p += ReducedWirelessConfigurationDataSize;
+					}
+					else if (i == 0)
+					{
+						memset(p, 0, ReducedWirelessConfigurationDataSize);
+						p += ReducedWirelessConfigurationDataSize;
+					}
+				}
+				const size_t numBytes = p - reinterpret_cast<char*>(transferBuffer);
+				SendResponse(numBytes);
+			}
+			break;
+
+		case NetworkCommand::networkListSsids_deprecated:	// list the access points we know about, plus our own access point details
 			{
 				char *p = reinterpret_cast<char*>(transferBuffer);
 				for (size_t i = 0; i <= MaxRememberedNetworks; ++i)
 				{
-					WirelessConfigurationData tempData;
-					EEPROM.get(i * sizeof(WirelessConfigurationData), tempData);
-					if (tempData.ssid[0] != 0xFF)
+					const WirelessConfigurationData * const tempData = EEPROM.getPtr<WirelessConfigurationData>(i * sizeof(WirelessConfigurationData));
+					if (tempData->ssid[0] != 0xFF)
 					{
-						for (size_t j = 0; j < SsidLength && tempData.ssid[j] != 0; ++j)
+						for (size_t j = 0; j < SsidLength && tempData->ssid[j] != 0; ++j)
 						{
-							*p++ = tempData.ssid[j];
+							*p++ = tempData->ssid[j];
 						}
 						*p++ = '\n';
 					}
@@ -900,7 +926,7 @@ void ICACHE_RAM_ATTR ProcessRequest()
 void setup()
 {
 	// Enable serial port for debugging
-	Serial.begin(115200);
+	Serial.begin(WiFiBaudRate);
 	Serial.setDebugOutput(true);
 
 	WiFi.mode(WIFI_OFF);

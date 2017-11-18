@@ -55,7 +55,7 @@ enum class NetworkCommand : uint8_t
 	networkGetStatus,			// get the network connection status
 	networkAddSsid,				// add to our known access point list
 	networkDeleteSsid,			// delete a network from our access point list
-	networkListSsids,			// list the access points we know about
+	networkListSsids_deprecated, // list the access points we know about - DEPRECATED
 	networkConfigureAccessPoint, // configure our own access point details
 	networkStartClient,			// connect to an access point
 	networkStartAccessPoint,	// run as an access point
@@ -64,7 +64,8 @@ enum class NetworkCommand : uint8_t
 	networkSetHostName,			// set the host name
 	networkGetLastError,		// get the result of the last deferred command we sent
 
-	diagnostics					// print LwIP stats and possibly more values over the UART line
+	diagnostics,				// print LwIP stats and possibly more values over the UART line
+	networkRetrieveSsidData		// retrieve all the SSID data we have except the passwords
 };
 
 // Message header sent from the SAM to the ESP
@@ -106,6 +107,8 @@ struct WirelessConfigurationData
 	char ssid[SsidLength];			// the SSID
 	char password[PasswordLength];	// the WiFi password
 };
+
+const size_t ReducedWirelessConfigurationDataSize = offsetof(WirelessConfigurationData, password);
 
 struct NetworkStartClientData
 {
@@ -212,6 +215,8 @@ const int32_t ResponseBadParameter = -11;
 const int32_t ResponseUnknownError = -12;
 
 const size_t MaxRememberedNetworks = 20;
-static_assert(((MaxRememberedNetworks + 1) * (SsidLength + 1)) + 1 <= MaxDataLength, "Too many remembered networks");
+static_assert((MaxRememberedNetworks + 1) * ReducedWirelessConfigurationDataSize <= MaxDataLength, "Too many remembered networks");
+
+const unsigned int WiFiBaudRate = 74880;		// this is the default baud rate for the ESP8266
 
 #endif /* SRC_MESSAGEFORMATS_H_ */
