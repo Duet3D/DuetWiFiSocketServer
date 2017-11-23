@@ -764,6 +764,7 @@ void ICACHE_RAM_ATTR ProcessRequest()
 				const bool ok = Listener::Listen(lcData.remoteIp, lcData.port, lcData.protocol, lcData.maxConnections);
 				if (ok)
 				{
+					RebuildServices();					// update the MDNS services
 					debugPrintf("Listening on port %u\n", lcData.port);
 				}
 				else
@@ -890,7 +891,7 @@ void ICACHE_RAM_ATTR ProcessRequest()
 		case NetworkCommand::networkStop:					// disconnect from an access point, or close down our own access point
 			Connection::TerminateAll();						// terminate all connections
 			Listener::StopListening(0);						// stop listening on all ports
-			RebuildServices();								// stop the MDNS server (this will be the effect after terminating all listeners)
+			RebuildServices();								// remove the MDNS services
 			switch (currentState)
 			{
 			case WiFiState::connected:

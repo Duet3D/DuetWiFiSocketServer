@@ -66,48 +66,34 @@ void Connection::GetStatus(ConnStatusResponse& resp) const
 // Close the connection gracefully
 void Connection::Close()
 {
-	if (ownPcb == nullptr)
-	{
-		// should never get here
-		return;
-	}
-
 	switch(state)
 	{
 	case ConnState::connected:						// both ends are still connected
-		if (unAcked == 0)
+		if (unAcked != 0)
+		{
+			closeTimer = millis();
+			SetState(ConnState::closePending);		// wait for the remaining data to be sent before closing
+			break;
+		}
+		// no break
+	case ConnState::otherEndClosed:					// the other end has already closed the connection
+	case ConnState::closeReady:						// the other end has closed and we were already closePending
+	default:										// should not happen
+		if (ownPcb != nullptr)
 		{
 			tcp_recv(ownPcb, nullptr);
 			tcp_sent(ownPcb, nullptr);
 			tcp_err(ownPcb, nullptr);
 			tcp_close(ownPcb);
 			ownPcb = nullptr;
-			SetState(ConnState::free);
 		}
-		else
-		{
-			closeTimer = millis();
-			SetState(ConnState::closePending);
-		}
-		break;
-
-	case ConnState::otherEndClosed:					// the other end has already closed the connection
-	case ConnState::closeReady:						// the other end has closed and we were already closePending
-		tcp_recv(ownPcb, nullptr);
-		tcp_sent(ownPcb, nullptr);
-		tcp_err(ownPcb, nullptr);
-		tcp_close(ownPcb);
-		ownPcb = nullptr;
+		unAcked = 0;
+		FreePbuf();
 		SetState(ConnState::free);
 		break;
 
-	case ConnState::closePending:
+	case ConnState::closePending:					// we already asked to close
 		// Should not happen, but if it does just let the close proceed when sending is complete or timeout
-		break;
-
-	default:
-		// should not happen
-		SetState(ConnState::free);
 		break;
 	}
 }
@@ -115,7 +101,6 @@ void Connection::Close()
 // Terminate the connection
 void Connection::Terminate()
 {
-	FreePbuf();
 	if (ownPcb != nullptr)
 	{
 		tcp_recv(ownPcb, nullptr);
@@ -124,6 +109,8 @@ void Connection::Terminate()
 		tcp_abort(ownPcb);
 		ownPcb = nullptr;
 	}
+	unAcked = 0;
+	FreePbuf();
 	SetState(ConnState::free);
 }
 
