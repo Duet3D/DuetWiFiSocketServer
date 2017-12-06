@@ -16,6 +16,7 @@ const uint32_t MaxAckTime = 4000;		// how long we wait for a connection to ackno
 // C interface functions
 extern "C"
 {
+	#include "lwip/init.h"				// for version info
 	#include "lwip/tcp.h"
 
 	static void conn_err(void *arg, err_t err)
@@ -173,6 +174,13 @@ size_t Connection::Write(const uint8_t *data, size_t length, bool doPush, bool c
 	else
 	{
 		// Something went wrong. Let the main firmware deal with this
+#if LWIP_VERSION_MAJOR == 2
+		// chrishamm: Not sure if this helps with LwIP v1.4.3 but it is mandatory for proper error handling with LwIP 2.0.3
+		tcp_abort(ownPcb);
+		ownPcb = nullptr;
+		SetState(ConnState::aborted);
+		FreePbuf();
+#endif
 		return 0;
 	}
 
@@ -263,7 +271,7 @@ void Connection::Report()
 }
 
 // Callback functions
-err_t Connection::Accept(tcp_pcb *pcb)
+int Connection::Accept(tcp_pcb *pcb)
 {
 	ownPcb = pcb;
 	tcp_arg(pcb, this);				// tell LWIP that this is the structure we wish to be passed for our callbacks
@@ -280,7 +288,7 @@ err_t Connection::Accept(tcp_pcb *pcb)
 	return ERR_OK;
 }
 
-void Connection::ConnError(err_t err)
+void Connection::ConnError(int err)
 {
 	tcp_sent(ownPcb, nullptr);
 	tcp_recv(ownPcb, nullptr);
@@ -289,7 +297,7 @@ void Connection::ConnError(err_t err)
 	SetState(ConnState::aborted);
 }
 
-err_t Connection::ConnRecv(pbuf *p, err_t err)
+int Connection::ConnRecv(pbuf *p, int err)
 {
 	if (p == nullptr)
 	{
@@ -318,7 +326,7 @@ err_t Connection::ConnRecv(pbuf *p, err_t err)
 }
 
 // This is called when sent data has been acknowledged
-err_t Connection::ConnSent(uint16_t len)
+int Connection::ConnSent(uint16_t len)
 {
 	if (len <= unAcked)
 	{

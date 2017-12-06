@@ -9,10 +9,13 @@
 #include "Connection.h"
 #include "Config.h"
 
+#include <HardwareSerial.h>
+
 // C interface functions
 extern "C"
 {
 	#include "lwip/tcp.h"
+	#include "lwip/err.h"
 
 	static err_t conn_accept(void *arg, tcp_pcb *pcb, err_t err)
 	{
@@ -37,7 +40,7 @@ Listener::Listener()
 {
 }
 
-err_t Listener::Accept(tcp_pcb *pcb)
+int Listener::Accept(tcp_pcb *pcb)
 {
 	if (listeningPcb != nullptr)
 	{
@@ -110,7 +113,7 @@ void Listener::Stop()
 		return false;
 	}
 
-	ip_addr tempIp;
+	ip_addr_t tempIp;
 	tempIp.addr = ip;
 	tempPcb->so_options |= SOF_REUSEADDR;			// not sure we need this, but the Arduino HTTP server does it
 	if (tcp_bind(tempPcb, &tempIp, port) != ERR_OK)

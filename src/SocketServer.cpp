@@ -9,9 +9,22 @@
 #undef yield
 #undef array
 
+extern "C"
+{
+	#include "user_interface.h"     // for struct rst_info
+	#include "lwip/init.h"			// for version info
+	#include "lwip/stats.h"			// for stats_display()
+
+#if LWIP_VERSION_MAJOR == 2
+	#include "lwip/apps/mdns.h"
+	#include "lwip/apps/netbiosns.h"
+#else
+	#include "lwip/app/netbios.h"	// for NetBIOS support
+#endif
+}
+
 #include <cstdarg>
 #include <ESP8266WiFi.h>
-#include <ESP8266mDNS.h>
 #include <DNSServer.h>
 #include <EEPROM.h>
 #include "SocketServer.h"
@@ -24,12 +37,18 @@
 #include "Listener.h"
 #include "Misc.h"
 
-extern "C"
-{
-	#include "user_interface.h"     // for struct rst_info
-	#include "lwip/stats.h"			// for stats_display()
-	#include "lwip/app/netbios.h"	// for NetBIOS support
-}
+const unsigned int ONBOARD_LED = D4;				// GPIO 2
+const bool ONBOARD_LED_ON = false;					// active low
+const uint32_t ONBOARD_LED_BLINK_INTERVAL = 500;	// ms
+
+#if LWIP_VERSION_MAJOR == 2
+const char * const MdnsProtocolNames[3] = { "HTTP", "FTP", "Telnet" };
+const char * const MdnsServiceStrings[3] = { "_http", "_ftp", "_telnet" };
+const char * const MdnsTxtRecords[2] = { "product=DuetWiFi", "version=" VERSION_MAIN };
+const unsigned int MdnsTtl = 10 * 60;			// same value as on the Duet 0.6/0.8.5
+#else
+# include <ESP8266mDNS.h>
+#endif
 
 #define array _ecv_array
 
@@ -53,6 +72,7 @@ static char lastConnectError[100];
 static WiFiState currentState = WiFiState::idle,
 				prevCurrentState = WiFiState::disabled,
 				lastReportedState = WiFiState::disabled;
+static uint32_t lastBlinkTime = 0;
 
 ADC_MODE(ADC_VCC);          // need this for the ESP.getVcc() call to work
 
@@ -195,11 +215,16 @@ void ConnectPoll()
 			}
 			else
 			{
+#if LWIP_VERSION_MAJOR == 2
+				mdns_resp_netif_settings_changed(netif_list);	// STA is on first interface
+#else
 				MDNS.begin(webHostName);
+#endif
 			}
-			currentState = WiFiState::connected;
-			debugPrint("Connected to AP\n");
 
+			debugPrint("Connected to AP\n");
+			currentState = WiFiState::connected;
+			digitalWrite(ONBOARD_LED, ONBOARD_LED_ON);
 			break;
 
 		default:
@@ -220,6 +245,7 @@ void ConnectPoll()
 			{
 				WiFi.mode(WIFI_OFF);
 				currentState = WiFiState::idle;
+				digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 			}
 		}
 		break;
@@ -245,6 +271,7 @@ void ConnectPoll()
 			case STATION_WRONG_PASSWORD:
 				error = "state 'wrong password'";
 				currentState = WiFiState::idle;
+				digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 				break;
 
 			case STATION_NO_AP_FOUND:
@@ -260,6 +287,7 @@ void ConnectPoll()
 			default:
 				error = "unknown WiFi state";
 				currentState = WiFiState::idle;
+				digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 				break;
 			}
 
@@ -314,6 +342,7 @@ pre(currentState == WiFiState::idle)
 		{
 			lastError = "network scan failed";
 			currentState = WiFiState::idle;
+			digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 			return;
 		}
 
@@ -416,12 +445,19 @@ void StartAccessPoint()
 			}
 			SafeStrncpy(currentSsid, apData.ssid, ARRAY_SIZE(currentSsid));
 			currentState = WiFiState::runningAsAccessPoint;
+			digitalWrite(ONBOARD_LED, ONBOARD_LED_ON);
+#if LWIP_VERSION_MAJOR == 2
+			mdns_resp_netif_settings_changed(netif_list->next);		// AP is on second interface
+#else
+			MDNS.begin(webHostName);
+#endif
 		}
 		else
 		{
 			lastError = "Failed to start access point";
 			debugPrintf("%s\n", lastError);
 			currentState = WiFiState::idle;
+			digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 		}
 	}
 	else
@@ -429,6 +465,7 @@ void StartAccessPoint()
 		lastError = "invalid access point configuration";
 		debugPrintf("%s\n", lastError);
 		currentState = WiFiState::idle;
+		digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 	}
 }
 
@@ -443,6 +480,40 @@ static union
 	MessageHeaderEspToSam hdr;
 	uint32_t asDwords[headerDwords];	// to force alignment
 } messageHeaderOut;
+
+#if LWIP_VERSION_MAJOR == 2
+void GetServiceTxtEntries(struct mdns_service *service, void *txt_userdata)
+{
+	for (size_t i = 0; i < ARRAY_SIZE(MdnsTxtRecords); i++)
+	{
+		mdns_resp_add_service_txtitem(service, MdnsTxtRecords[i], strlen(MdnsTxtRecords[i]));
+	}
+}
+
+// Rebuild the mDNS services
+void RebuildServices()
+{
+	for (struct netif *item = netif_list; item != nullptr; item = item->next)
+	{
+		mdns_resp_remove_netif(item);
+		mdns_resp_add_netif(item, webHostName, MdnsTtl);
+		mdns_resp_add_service(item, "echo", "_echo", DNSSD_PROTO_TCP, 0, 0, nullptr, nullptr);
+
+		for (size_t protocol = 0; protocol < 3; protocol++)
+		{
+			const uint16_t port = Listener::GetPortByProtocol(protocol);
+			if (port != 0)
+			{
+				service_get_txt_fn_t txtFunc = (protocol == 0/*HttpProtocol*/) ? GetServiceTxtEntries : nullptr;
+				mdns_resp_add_service(item, MdnsProtocolNames[protocol], MdnsServiceStrings[protocol], DNSSD_PROTO_TCP, port, MdnsTtl, txtFunc, nullptr);
+			}
+		}
+
+		mdns_resp_netif_settings_changed(item);
+	}
+}
+
+#else
 
 // Rebuild the MDNS server to advertise a single service
 void AdvertiseService(int service, uint16_t port)
@@ -485,6 +556,7 @@ void RebuildServices()
 		AdvertiseService(-1, 0);		// no services to advertise
 	}
 }
+#endif
 
 // Send a response.
 // 'response' is the number of byes of response if positive, or the error code if negative.
@@ -726,6 +798,9 @@ void ICACHE_RAM_ATTR ProcessRequest()
 				hspi.transferDwords(nullptr, transferBuffer, NumDwords(HostNameLength));
 				memcpy(webHostName, transferBuffer, HostNameLength);
 				webHostName[HostNameLength] = 0;			// ensure null terminator
+#if LWIP_VERSION_MAJOR == 2
+				netbiosns_set_name(webHostName);
+#endif
 			}
 			else
 			{
@@ -897,7 +972,9 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			case WiFiState::connected:
 			case WiFiState::connecting:
 			case WiFiState::reconnecting:
+#if LWIP_VERSION_MAJOR == 1
 				MDNS.deleteServices();
+#endif
 				WiFi.disconnect(true);
 				break;
 
@@ -911,6 +988,7 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			}
 			delay(100);
 			currentState = WiFiState::idle;
+			digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 			break;
 
 		case NetworkCommand::networkFactoryReset:			// clear remembered list, reset factory defaults
@@ -929,6 +1007,10 @@ void setup()
 	// Enable serial port for debugging
 	Serial.begin(WiFiBaudRate);
 	Serial.setDebugOutput(true);
+
+	// Turn off LED
+	pinMode(ONBOARD_LED, OUTPUT);
+	digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 
 	WiFi.mode(WIFI_OFF);
 	WiFi.persistent(false);
@@ -953,7 +1035,16 @@ void setup()
 
     Connection::Init();
     Listener::Init();
+#if LWIP_VERSION_MAJOR == 2
+    mdns_resp_init();
+	for (struct netif *item = netif_list; item != nullptr; item = item->next)
+	{
+		mdns_resp_add_netif(item, webHostName, MdnsTtl);
+	}
+    netbiosns_init();
+#else
     netbios_init();
+#endif
     lastError = nullptr;
     debugPrint("Init completed\n");
 	digitalWrite(EspReqTransferPin, HIGH);				// tell the SAM we are ready to receive a command
@@ -990,6 +1081,14 @@ void loop()
 	if (currentState == WiFiState::runningAsAccessPoint)
 	{
 		dns.processNextRequest();
+	}
+	else if (	(currentState == WiFiState::autoReconnecting ||
+				 currentState == WiFiState::connecting ||
+				 currentState == WiFiState::reconnecting) &&
+				(millis() - lastBlinkTime > ONBOARD_LED_BLINK_INTERVAL))
+	{
+		lastBlinkTime = millis();
+		digitalWrite(ONBOARD_LED, !digitalRead(ONBOARD_LED));
 	}
 }
 

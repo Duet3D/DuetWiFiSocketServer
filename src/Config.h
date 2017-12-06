@@ -5,7 +5,7 @@
 
 #define NO_WIFI_SLEEP	0
 
-#define VERSION_MAIN	"1.20b10"
+#define VERSION_MAIN	"1.20b11"
 
 #if NO_WIFI_SLEEP
 #define VERSION_SLEEP	"-nosleep"
@@ -39,8 +39,8 @@ const uint8_t Backlog = 8;
 #define ARRAY_SIZE(_x) (sizeof(_x)/sizeof((_x)[0]))
 
 #ifdef DEBUG
-#define debugPrint(_str)		ets_printf("%s", _str)
-#define debugPrintf(_format, ...)	ets_printf(_format, __VA_ARGS__)
+#define debugPrint(_str)		printf("%s", _str)
+#define debugPrintf(_format, ...)	printf(_format, __VA_ARGS__)
 #else
 #define debugPrint(_format)		do {} while(false)
 #define debugPrintf(_format, ...)	do {} while(false)
