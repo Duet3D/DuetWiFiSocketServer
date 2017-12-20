@@ -4,9 +4,9 @@
 		<cconfiguration id="cdt.managedbuild.config.gnu.cross.exe.release.385783058">
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.config.gnu.cross.exe.release.385783058" moduleId="org.eclipse.cdt.core.settings" name="Release">
 				<macros>
-					<stringMacro name="EspBootFile" type="VALUE_TEXT" value="/home/christian/.arduino15/packages/esp8266/hardware/esp8266/2.3.0/bootloaders/eboot/eboot.elf"/>
-					<stringMacro name="EspToolPath" type="VALUE_TEXT" value="/home/christian/.arduino15/packages/esp8266/tools/esptool/0.4.9/esptool"/>
-					<stringMacro name="GccPath" type="VALUE_TEXT" value="/home/christian/.arduino15/packages/esp8266/tools/xtensa-lx106-elf-gcc/1.20.0-26-gb404fb9-2/bin"/>
+					<stringMacro name="EspBootFile" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.4.0-rc2/bootloaders/eboot/eboot.elf"/>
+					<stringMacro name="EspToolPath" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\tools\esptool\0.4.12/esptool.exe"/>
+					<stringMacro name="GccPath" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\tools\xtensa-lx106-elf-gcc\1.20.0-26-gb404fb9-2\bin"/>
 				</macros>
 				<externalSettings/>
 				<extensions>
@@ -25,7 +25,7 @@
 							<option id="cdt.managedbuild.option.gnu.cross.prefix.641887751" name="Prefix" superClass="cdt.managedbuild.option.gnu.cross.prefix" useByScannerDiscovery="false" value="xtensa-lx106-elf-" valueType="string"/>
 							<option id="cdt.managedbuild.option.gnu.cross.path.1433907212" name="Path" superClass="cdt.managedbuild.option.gnu.cross.path" useByScannerDiscovery="false" value="${GccPath}" valueType="string"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="cdt.managedbuild.targetPlatform.gnu.cross.319475565" isAbstract="false" osList="all" superClass="cdt.managedbuild.targetPlatform.gnu.cross"/>
-							<builder buildPath="${workspace_loc:/DuetWiFiSocketServer}/Release" id="cdt.managedbuild.builder.gnu.cross.1640258919" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="cdt.managedbuild.builder.gnu.cross"/>
+							<builder buildPath="${workspace_loc:/DuetWiFiSocketServer}/Release" id="cdt.managedbuild.builder.gnu.cross.1640258919" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="optimal" superClass="cdt.managedbuild.builder.gnu.cross"/>
 							<tool id="cdt.managedbuild.tool.gnu.cross.c.compiler.2083206230" name="Cross GCC Compiler" superClass="cdt.managedbuild.tool.gnu.cross.c.compiler">
 								<option defaultValue="gnu.c.optimization.level.most" id="gnu.c.compiler.option.optimization.level.167077255" name="Optimization Level" superClass="gnu.c.compiler.option.optimization.level" useByScannerDiscovery="false" valueType="enumerated"/>
 								<option id="gnu.c.compiler.option.debugging.level.1993215946" name="Debug Level" superClass="gnu.c.compiler.option.debugging.level" useByScannerDiscovery="false" value="gnu.c.debugging.level.none" valueType="enumerated"/>
@@ -72,12 +72,12 @@
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1830564814" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.cross.c.linker.1625496096" name="Cross GCC Linker" superClass="cdt.managedbuild.tool.gnu.cross.c.linker"/>
-							<tool commandLinePattern="${COMMAND} ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} -Wl,--start-group ${INPUTS} -Wl,--end-group" id="cdt.managedbuild.tool.gnu.cross.cpp.linker.2135494508" name="Cross G++ Linker" superClass="cdt.managedbuild.tool.gnu.cross.cpp.linker">
+							<tool commandLinePattern="${COMMAND} ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} -Wl,--start-group ${workspace_loc}/CoreESP8266/${ConfigName}/cores/esp8266/heap.o ${INPUTS} -Wl,--end-group" id="cdt.managedbuild.tool.gnu.cross.cpp.linker.2135494508" name="Cross G++ Linker" superClass="cdt.managedbuild.tool.gnu.cross.cpp.linker">
 								<option id="gnu.cpp.link.option.paths.755420080" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths">
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/LwipESP8266/Release}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/Release}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/sdk/lib}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/src/ld}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc}/LwipESP8266/Release&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc}/CoreESP8266/Release&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc}/CoreESP8266/sdk/lib&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc}/${ProjName}/src/ld&quot;"/>
 								</option>
 								<option id="gnu.cpp.link.option.libs.2047329455" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" useByScannerDiscovery="false" valueType="libs">
 									<listOptionValue builtIn="false" value="CoreESP8266"/>
@@ -121,9 +121,9 @@
 		<cconfiguration id="cdt.managedbuild.config.gnu.cross.exe.release.385783058.1711183282">
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.config.gnu.cross.exe.release.385783058.1711183282" moduleId="org.eclipse.cdt.core.settings" name="Debug">
 				<macros>
-					<stringMacro name="EspBootFile" type="VALUE_TEXT" value="/home/christian/.arduino15/packages/esp8266/hardware/esp8266/2.3.0/bootloaders/eboot/eboot.elf"/>
-					<stringMacro name="EspToolPath" type="VALUE_TEXT" value="/home/christian/.arduino15/packages/esp8266/tools/esptool/0.4.9/esptool"/>
-					<stringMacro name="GccPath" type="VALUE_TEXT" value="/home/christian/.arduino15/packages/esp8266/tools/xtensa-lx106-elf-gcc/1.20.0-26-gb404fb9-2/bin"/>
+					<stringMacro name="EspBootFile" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.4.0-rc2/bootloaders/eboot/eboot.elf"/>
+					<stringMacro name="EspToolPath" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\tools\esptool\0.4.12/esptool.exe"/>
+					<stringMacro name="GccPath" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\tools\xtensa-lx106-elf-gcc\1.20.0-26-gb404fb9-2\bin"/>
 				</macros>
 				<externalSettings/>
 				<extensions>
@@ -142,7 +142,7 @@
 							<option id="cdt.managedbuild.option.gnu.cross.prefix.1639058805" name="Prefix" superClass="cdt.managedbuild.option.gnu.cross.prefix" useByScannerDiscovery="false" value="xtensa-lx106-elf-" valueType="string"/>
 							<option id="cdt.managedbuild.option.gnu.cross.path.801521222" name="Path" superClass="cdt.managedbuild.option.gnu.cross.path" useByScannerDiscovery="false" value="${GccPath}" valueType="string"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="cdt.managedbuild.targetPlatform.gnu.cross.954347316" isAbstract="false" osList="all" superClass="cdt.managedbuild.targetPlatform.gnu.cross"/>
-							<builder buildPath="${workspace_loc:/DuetWiFiSocketServer}/Release" id="cdt.managedbuild.builder.gnu.cross.207540841" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" superClass="cdt.managedbuild.builder.gnu.cross"/>
+							<builder buildPath="${workspace_loc:/DuetWiFiSocketServer}/Release" id="cdt.managedbuild.builder.gnu.cross.207540841" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="optimal" superClass="cdt.managedbuild.builder.gnu.cross"/>
 							<tool id="cdt.managedbuild.tool.gnu.cross.c.compiler.918668756" name="Cross GCC Compiler" superClass="cdt.managedbuild.tool.gnu.cross.c.compiler">
 								<option defaultValue="gnu.c.optimization.level.most" id="gnu.c.compiler.option.optimization.level.1374662193" name="Optimization Level" superClass="gnu.c.compiler.option.optimization.level" useByScannerDiscovery="false" valueType="enumerated"/>
 								<option id="gnu.c.compiler.option.debugging.level.1264535549" name="Debug Level" superClass="gnu.c.compiler.option.debugging.level" useByScannerDiscovery="false" value="gnu.c.debugging.level.none" valueType="enumerated"/>
@@ -189,12 +189,12 @@
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.compiler.input.1699540131" superClass="cdt.managedbuild.tool.gnu.cpp.compiler.input"/>
 							</tool>
 							<tool id="cdt.managedbuild.tool.gnu.cross.c.linker.88112554" name="Cross GCC Linker" superClass="cdt.managedbuild.tool.gnu.cross.c.linker"/>
-							<tool commandLinePattern="${COMMAND} ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} -Wl,--start-group ${INPUTS} -Wl,--end-group" id="cdt.managedbuild.tool.gnu.cross.cpp.linker.1400319925" name="Cross G++ Linker" superClass="cdt.managedbuild.tool.gnu.cross.cpp.linker">
+							<tool commandLinePattern="${COMMAND} ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} -Wl,--start-group ${workspace_loc}/CoreESP8266/${ConfigName}/cores/esp8266/heap.o ${INPUTS} -Wl,--end-group" id="cdt.managedbuild.tool.gnu.cross.cpp.linker.1400319925" name="Cross G++ Linker" superClass="cdt.managedbuild.tool.gnu.cross.cpp.linker">
 								<option id="gnu.cpp.link.option.paths.434353686" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths">
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/LwipESP8266/Release}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/Release}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/sdk/lib}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/src/ld}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc}/LwipESP8266/Release&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc}/CoreESP8266/Release&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc}/CoreESP8266/sdk/lib&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc}/${ProjName}/src/ld&quot;"/>
 								</option>
 								<option id="gnu.cpp.link.option.libs.231887005" name="Libraries (-l)" superClass="gnu.cpp.link.option.libs" useByScannerDiscovery="false" valueType="libs">
 									<listOptionValue builtIn="false" value="CoreESP8266"/>

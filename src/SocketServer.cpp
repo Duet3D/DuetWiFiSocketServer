@@ -505,7 +505,7 @@ void RebuildServices()
 			if (port != 0)
 			{
 				service_get_txt_fn_t txtFunc = (protocol == 0/*HttpProtocol*/) ? GetServiceTxtEntries : nullptr;
-				mdns_resp_add_service(item, MdnsProtocolNames[protocol], MdnsServiceStrings[protocol], DNSSD_PROTO_TCP, port, MdnsTtl, txtFunc, nullptr);
+				mdns_resp_add_service(item, webHostName, MdnsServiceStrings[protocol], DNSSD_PROTO_TCP, port, MdnsTtl, txtFunc, nullptr);
 			}
 		}
 

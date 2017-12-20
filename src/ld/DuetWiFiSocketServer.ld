@@ -179,8 +179,6 @@ SECTIONS
     *libgcc.a:_udivdi3.o(.literal .text)
     *libsmartconfig.a:(.literal .text .literal.* .text.*)
     *libstdc++.a:(.literal .text .literal.* .text.*)
-    *liblwip_gcc.a:(.literal .text .literal.* .text.*)
-    *liblwip_src.a:(.literal .text .literal.* .text.*)
     *libaxtls.a:(.literal .text .literal.* .text.*)
     *libat.a:(.literal.* .text.*)
     *libcrypto.a:(.literal.* .text.*)
