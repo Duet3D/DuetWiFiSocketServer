@@ -49,7 +49,6 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/cores/esp8266}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/variants/nodemcu}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/libraries/ESP8266WiFi/src}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/libraries/ESP8266mDNS}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/libraries/DNSServer/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/libraries/EEPROM}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/LwipESP8266/src/include}&quot;"/>
@@ -165,7 +164,6 @@
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/cores/esp8266}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/variants/nodemcu}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/libraries/ESP8266WiFi/src}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/libraries/ESP8266mDNS}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/libraries/DNSServer/src}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/libraries/EEPROM}&quot;"/>
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/LwipESP8266/src/include}&quot;"/>

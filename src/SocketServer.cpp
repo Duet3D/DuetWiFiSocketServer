@@ -652,14 +652,14 @@ void ICACHE_RAM_ATTR ProcessRequest()
 										: (runningAsStation)
 										  ? static_cast<uint32_t>(WiFi.localIP())
 											  : 0;
-				response->freeHeap = ESP.getFreeHeap();
-				response->resetReason = ESP.getResetInfoPtr()->reason;
-				response->flashSize = ESP.getFlashChipRealSize();
+				response->freeHeap = system_get_free_heap_size();
+				response->resetReason = system_get_rst_info()->reason;
+				response->flashSize = 1u << ((spi_flash_get_id() >> 16) & 0xFF);
 				response->rssi = (runningAsStation) ? wifi_station_get_rssi() : 0;
 				response->numClients = (runningAsAp) ? wifi_softap_get_station_num() : 0;
 				response->sleepMode = (uint8_t)wifi_get_sleep_type() + 1;
 				response->spare = 0;
-				response->vcc = ESP.getVcc();
+				response->vcc = system_get_vdd33();
 			    wifi_get_macaddr((runningAsAp) ? SOFTAP_IF : STATION_IF, response->macAddress);
 			    SafeStrncpy(response->versionText, firmwareVersion, sizeof(response->versionText));
 			    SafeStrncpy(response->hostName, webHostName, sizeof(response->hostName));
