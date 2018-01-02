@@ -350,6 +350,7 @@ pre(currentState == WiFiState::idle)
 		int8_t strongestNetwork = -1;
 		for (int8_t i = 0; i < num_ssids; ++i)
 		{
+			debugPrintfAlways("found network %s\n", WiFi.SSID(i).c_str());
 			if (strongestNetwork < 0 || WiFi.RSSI(i) > WiFi.RSSI(strongestNetwork))
 			{
 				const WirelessConfigurationData *wp = RetrieveSsidData(WiFi.SSID(i).c_str(), nullptr);
@@ -482,6 +483,7 @@ static union
 } messageHeaderOut;
 
 #if LWIP_VERSION_MAJOR == 2
+
 void GetServiceTxtEntries(struct mdns_service *service, void *txt_userdata)
 {
 	for (size_t i = 0; i < ARRAY_SIZE(MdnsTxtRecords); i++)
@@ -556,6 +558,7 @@ void RebuildServices()
 		AdvertiseService(-1, 0);		// no services to advertise
 	}
 }
+
 #endif
 
 // Send a response.

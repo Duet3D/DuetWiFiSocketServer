@@ -4,7 +4,7 @@
 		<cconfiguration id="cdt.managedbuild.config.gnu.cross.exe.release.385783058">
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.config.gnu.cross.exe.release.385783058" moduleId="org.eclipse.cdt.core.settings" name="Release">
 				<macros>
-					<stringMacro name="EspBootFile" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.4.0-rc2/bootloaders/eboot/eboot.elf"/>
+					<stringMacro name="EspBootFile" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.4.0/bootloaders/eboot/eboot.elf"/>
 					<stringMacro name="EspToolPath" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\tools\esptool\0.4.12/esptool.exe"/>
 					<stringMacro name="GccPath" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\tools\xtensa-lx106-elf-gcc\1.20.0-26-gb404fb9-2\bin"/>
 				</macros>
@@ -120,7 +120,7 @@
 		<cconfiguration id="cdt.managedbuild.config.gnu.cross.exe.release.385783058.1711183282">
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.config.gnu.cross.exe.release.385783058.1711183282" moduleId="org.eclipse.cdt.core.settings" name="Debug">
 				<macros>
-					<stringMacro name="EspBootFile" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.4.0-rc2/bootloaders/eboot/eboot.elf"/>
+					<stringMacro name="EspBootFile" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.4.0/bootloaders/eboot/eboot.elf"/>
 					<stringMacro name="EspToolPath" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\tools\esptool\0.4.12/esptool.exe"/>
 					<stringMacro name="GccPath" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\tools\xtensa-lx106-elf-gcc\1.20.0-26-gb404fb9-2\bin"/>
 				</macros>

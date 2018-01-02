@@ -56,7 +56,7 @@ int Listener::Accept(tcp_pcb *pcb)
 		}
 	}
 	tcp_abort(pcb);
-	debugPrint("Refused conn\n");
+	debugPrintAlways("refused conn\n");
 	return ERR_ABRT;
 }
 
@@ -98,6 +98,7 @@ void Listener::Stop()
 	Listener * const p = Allocate();
 	if (p == nullptr)
 	{
+		debugPrintAlways("can't allocate listener\n");
 		return false;
 	}
 	p->ip = ip;
@@ -110,16 +111,19 @@ void Listener::Stop()
 	if (tempPcb == nullptr)
 	{
 		Release(p);
+		debugPrintAlways("can't allocate PCB\n");
 		return false;
 	}
 
 	ip_addr_t tempIp;
 	tempIp.addr = ip;
 	tempPcb->so_options |= SOF_REUSEADDR;			// not sure we need this, but the Arduino HTTP server does it
-	if (tcp_bind(tempPcb, &tempIp, port) != ERR_OK)
+	err_t rc = tcp_bind(tempPcb, &tempIp, port);
+	if (rc != ERR_OK)
 	{
 		tcp_close(tempPcb);
 		Release(p);
+		debugPrintfAlways("can't bind PCB: %d\n", (int)rc);
 		return false;
 	}
 	p->listeningPcb = tcp_listen_with_backlog(tempPcb, Backlog);
@@ -127,6 +131,7 @@ void Listener::Stop()
 	{
 		tcp_close(tempPcb);
 		Release(p);
+		debugPrintAlways("tcp_listen failed\n");
 		return false;
 	}
 	tcp_arg(p->listeningPcb, p);
