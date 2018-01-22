@@ -49,8 +49,8 @@ enum class NetworkCommand : uint8_t
 	connWrite,					// write data to a connection
 	connGetStatus,				// get the status of a connection
 
-	networkListen,				// listen for incoming connections to a port
-	networkStopListening,		// stop listening for connections to a port
+	networkListen,				// listen for incoming connections to a port, or stop listening
+	unused_networkStopListening, // stop listening for connections to a port
 
 	networkGetStatus,			// get the network connection status
 	networkAddSsid,				// add to our known access point list
@@ -86,6 +86,8 @@ struct MessageHeaderSamToEsp
 
 const size_t headerDwords = SIZE_IN_DWORDS(MessageHeaderSamToEsp);
 
+// Message data sent from SAM to ESP for a connCreate, networkListen or networkStopListening command
+// For a networkStopListening command, only the port number is used
 struct ListenOrConnectData
 {
 	uint32_t remoteIp;			// IP address to listen for, 0 means any

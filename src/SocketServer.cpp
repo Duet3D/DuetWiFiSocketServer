@@ -843,7 +843,7 @@ void ICACHE_RAM_ATTR ProcessRequest()
 				if (ok)
 				{
 					RebuildServices();					// update the MDNS services
-					debugPrintf("Listening on port %u\n", lcData.port);
+					debugPrintf("%sListening on port %u\n", (lcData.maxConnections == 0) ? "Stopped " : "", lcData.port);
 				}
 				else
 				{
@@ -852,6 +852,20 @@ void ICACHE_RAM_ATTR ProcessRequest()
 				}
 			}
 			break;
+
+#if 0	// We don't use the following command, instead we use networkListen with maxConnections = 0
+		case NetworkCommand::unused_networkStopListening:
+			if (messageHeaderIn.hdr.dataLength == sizeof(ListenOrConnectData))
+			{
+				messageHeaderIn.hdr.param32 = hspi.transfer32(ResponseEmpty);
+				ListenOrConnectData lcData;
+				hspi.transferDwords(nullptr, reinterpret_cast<uint32_t*>(&lcData), NumDwords(sizeof(lcData)));
+				Listener::StopListening(lcData.port);
+				RebuildServices();						// update the MDNS services
+				debugPrintf("Stopped listening on port %u\n", lcData.port);
+			}
+			break;
+#endif
 
 		case NetworkCommand::connAbort:					// terminate a socket rudely
 			if (ValidSocketNumber(messageHeaderIn.hdr.socketNumber))
@@ -935,6 +949,7 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			break;
 
 		case NetworkCommand::connCreate:				// create a connection
+			// Not implemented yet
 		default:
 			SendResponse(ResponseUnknownCommand);
 			break;

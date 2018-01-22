@@ -70,7 +70,7 @@ void Listener::Stop()
 	}
 }
 
-// Set up a listener on a port, returning true if successful
+// Set up a listener on a port, returning true if successful, or stop listening of maxConnections = 0
 /*static*/ bool Listener::Listen(uint32_t ip, uint16_t port, uint8_t protocol, uint16_t maxConns)
 {
 	// See if we are already listing for this
@@ -79,12 +79,12 @@ void Listener::Stop()
 		Listener *n = p->next;
 		if (p->port == port)
 		{
-			if (p->ip == IPADDR_ANY || p->ip == ip)
+			if (maxConns != 0 && (p->ip == IPADDR_ANY || p->ip == ip))
 			{
 				// already listening, so nothing to do
 				return true;
 			}
-			if (ip == IPADDR_ANY)
+			if (maxConns == 0 || ip == IPADDR_ANY)
 			{
 				p->Stop();
 				Unlink(p);
@@ -92,6 +92,11 @@ void Listener::Stop()
 			}
 		}
 		p = n;
+	}
+
+	if (maxConns == 0)
+	{
+		return true;
 	}
 
 	// If we get here then we need to set up a new listener

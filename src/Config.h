@@ -5,7 +5,7 @@
 
 #define NO_WIFI_SLEEP	0
 
-#define VERSION_MAIN	"1.20+1"
+#define VERSION_MAIN	"1.21RC1"
 
 #if NO_WIFI_SLEEP
 #define VERSION_SLEEP	"-nosleep"
