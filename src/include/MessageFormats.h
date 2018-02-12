@@ -14,7 +14,7 @@
 // If the ESP accepted the command, it then does an appropriate data transfer.
 // The SAM uses DMA to transfer the whole message, so it can only transfer the entire message.
 
-const unsigned int NumTcpSockets = 8;			// the number of concurrent TCP/IP connections supported
+const unsigned int NumWiFiTcpSockets = 8;		// the number of concurrent TCP/IP connections supported
 
 // First the message header formats
 const size_t SsidLength = 32;

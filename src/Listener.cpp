@@ -27,6 +27,14 @@ extern "C"
 		tcp_abort(pcb);
 		return ERR_ABRT;
 	}
+
+	static void listen_err(void *arg, err_t err)
+	{
+		if (arg != nullptr)
+		{
+			return ((Listener*)arg)->ListenError(err);
+		}
+	}
 }
 
 
@@ -60,6 +68,17 @@ int Listener::Accept(tcp_pcb *pcb)
 	return ERR_ABRT;
 }
 
+void Listener::ListenError(int err)
+{
+	if (listeningPcb != nullptr)
+	{
+		tcp_arg(listeningPcb, nullptr);
+		listeningPcb = nullptr;
+	}
+	debugPrintAlways("listen error\n");
+	Unlink(this);
+}
+
 void Listener::Stop()
 {
 	if (listeningPcb != nullptr)
@@ -68,6 +87,7 @@ void Listener::Stop()
 		tcp_close(listeningPcb);			// stop listening and free the PCB
 		listeningPcb = nullptr;
 	}
+	Unlink(this);
 }
 
 // Set up a listener on a port, returning true if successful, or stop listening of maxConnections = 0
@@ -141,6 +161,7 @@ void Listener::Stop()
 	}
 	tcp_arg(p->listeningPcb, p);
 	tcp_accept(p->listeningPcb, conn_accept);
+	tcp_err(p->listeningPcb, listen_err);
 	p->next = activeList;
 	activeList = p;
 	return true;

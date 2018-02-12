@@ -116,10 +116,10 @@ bool FindEmptySsidEntry(int *index)
 	return false;
 }
 
-// Check socket number in range, returning trus if yes. Otherwise, set lastError and return false;
+// Check socket number in range, returning true if yes. Otherwise, set lastError and return false;
 bool ValidSocketNumber(uint8_t num)
 {
-	if (num < NumTcpSockets)
+	if (num < NumWiFiTcpSockets)
 	{
 		return true;
 	}
