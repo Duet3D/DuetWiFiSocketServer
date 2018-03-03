@@ -842,7 +842,10 @@ void ICACHE_RAM_ATTR ProcessRequest()
 				const bool ok = Listener::Listen(lcData.remoteIp, lcData.port, lcData.protocol, lcData.maxConnections);
 				if (ok)
 				{
-					RebuildServices();					// update the MDNS services
+					if (lcData.protocol < 3)			// if it's FTP, HTTP or Telnet protocol
+					{
+						RebuildServices();				// update the MDNS services
+					}
 					debugPrintf("%sListening on port %u\n", (lcData.maxConnections == 0) ? "Stopped " : "", lcData.port);
 				}
 				else

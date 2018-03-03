@@ -97,6 +97,11 @@ struct ListenOrConnectData
 	uint16_t maxConnections;	// maximum number of connections to accept if listening
 };
 
+const uint8_t protocolHTTP = 0;
+const uint8_t protocolFTP = 1;
+const uint8_t protocolTelnet = 2;
+const uint8_t protocolFtpData = 3;
+
 // Message data sent from SAM to ESP to add an SSID or set the access point configuration. This is also the format of a remembered SSID entry.
 struct WirelessConfigurationData
 {
