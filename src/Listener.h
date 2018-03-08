@@ -20,7 +20,6 @@ class Listener
 public:
 	Listener();
 	int Accept(tcp_pcb *pcb);
-	void ListenError(int err);
 
 	static void Init() { }
 	static bool Listen(uint32_t ip, uint16_t port, uint8_t protocol, uint16_t maxConns);

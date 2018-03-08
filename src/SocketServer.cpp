@@ -119,7 +119,7 @@ bool FindEmptySsidEntry(int *index)
 // Check socket number in range, returning true if yes. Otherwise, set lastError and return false;
 bool ValidSocketNumber(uint8_t num)
 {
-	if (num < NumWiFiTcpSockets)
+	if (num < MaxConnections)
 	{
 		return true;
 	}
@@ -515,6 +515,14 @@ void RebuildServices()
 	}
 }
 
+void RemoveMdnsServices()
+{
+	for (struct netif *item = netif_list; item != nullptr; item = item->next)
+	{
+		mdns_resp_remove_netif(item);
+	}
+}
+
 #else
 
 // Rebuild the MDNS server to advertise a single service
@@ -576,7 +584,8 @@ void ICACHE_RAM_ATTR SendResponse(int32_t response)
 // This is called when the SAM is asking to transfer data
 void ICACHE_RAM_ATTR ProcessRequest()
 {
-	// Set up our own header
+	// Set up our own headers
+	messageHeaderIn.hdr.formatVersion = InvalidFormatVersion;
 	messageHeaderOut.hdr.formatVersion = MyFormatVersion;
 	messageHeaderOut.hdr.state = currentState;
 	bool deferCommand = false;
@@ -587,11 +596,10 @@ void ICACHE_RAM_ATTR ProcessRequest()
 
 	// Exchange headers, except for the last dword which will contain our response
 	hspi.transferDwords(messageHeaderOut.asDwords, messageHeaderIn.asDwords, headerDwords - 1);
-	const size_t dataBufferAvailable = std::min<size_t>(messageHeaderIn.hdr.dataBufferAvailable, MaxDataLength);
 
 	if (messageHeaderIn.hdr.formatVersion != MyFormatVersion)
 	{
-		SendResponse(ResponseUnknownFormat);
+		SendResponse(ResponseBadRequestFormatVersion);
 	}
 	else if (messageHeaderIn.hdr.dataLength > MaxDataLength)
 	{
@@ -599,6 +607,8 @@ void ICACHE_RAM_ATTR ProcessRequest()
 	}
 	else
 	{
+		const size_t dataBufferAvailable = std::min<size_t>(messageHeaderIn.hdr.dataBufferAvailable, MaxDataLength);
+
 		// See what command we have received and take appropriate action
 		switch (messageHeaderIn.hdr.command)
 		{
@@ -993,14 +1003,19 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			case WiFiState::connected:
 			case WiFiState::connecting:
 			case WiFiState::reconnecting:
+#if LWIP_VERSION_MAJOR == 2
+				RemoveMdnsServices();
+#endif
 #if LWIP_VERSION_MAJOR == 1
 				MDNS.deleteServices();
 #endif
+				delay(20);									// try to give lwip time to recover from stopping everything
 				WiFi.disconnect(true);
 				break;
 
 			case WiFiState::runningAsAccessPoint:
 				dns.stop();
+				delay(20);									// try to give lwip time to recover from stopping everything
 				WiFi.softAPdisconnect(true);
 				break;
 
@@ -1036,7 +1051,15 @@ void setup()
 	WiFi.mode(WIFI_OFF);
 	WiFi.persistent(false);
 
-	// Reserve some flash space for use as EEPROM. The maximum EEPROM supported by the core is API_FLASH_SEC_SIZE (4Kb).
+	// If we started abnormally, send the exception details to the serial port
+	const rst_info *resetInfo = system_get_rst_info();
+	if (resetInfo->reason != 0 && resetInfo->reason != 6)	// if not power up or external reset
+	{
+		debugPrintfAlways("Restart after exception:%d flag:%d epc1:0x%08x epc2:0x%08x epc3:0x%08x excvaddr:0x%08x depc:0x%08x\n",
+			resetInfo->exccause, resetInfo->reason, resetInfo->epc1, resetInfo->epc2, resetInfo->epc3, resetInfo->excvaddr, resetInfo->depc);
+	}
+
+	// Reserve some flash space for use as EEPROM. The maximum EEPROM supported by the core is SPI_FLASH_SEC_SIZE (4Kb).
 	const size_t eepromSizeNeeded = (MaxRememberedNetworks + 1) * sizeof(WirelessConfigurationData);
 	static_assert(eepromSizeNeeded <= SPI_FLASH_SEC_SIZE, "Insufficient EEPROM");
 	EEPROM.begin(eepromSizeNeeded);
@@ -1075,6 +1098,8 @@ void setup()
 void loop()
 {
 	digitalWrite(EspReqTransferPin, HIGH);				// tell the SAM we are ready to receive a command
+	system_soft_wdt_feed();								// kick the watchdog
+
 	if (   (lastError != prevLastError || connectErrorChanged || currentState != prevCurrentState)
 		|| ((lastError != nullptr || currentState != lastReportedState) && millis() - lastStatusReportTime > StatusReportMillis)
 	   )

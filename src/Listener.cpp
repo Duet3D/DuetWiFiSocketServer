@@ -54,7 +54,7 @@ int Listener::Accept(tcp_pcb *pcb)
 				const int rslt = conn->Accept(pcb);
 				if (protocol == protocolFtpData)
 				{
-					debugPrintfAlways("accept conn, stop listen on port %u\n", port);
+					debugPrintf("accept conn, stop listen on port %u\n", port);
 					Stop();						// don't listen for further connections
 				}
 				return rslt;
@@ -72,17 +72,6 @@ int Listener::Accept(tcp_pcb *pcb)
 	}
 	tcp_abort(pcb);
 	return ERR_ABRT;
-}
-
-void Listener::ListenError(int err)
-{
-	if (listeningPcb != nullptr)
-	{
-		tcp_arg(listeningPcb, nullptr);
-		listeningPcb = nullptr;
-	}
-	debugPrintAlways("listen error\n");
-	Unlink(this);
 }
 
 void Listener::Stop()
@@ -109,13 +98,13 @@ void Listener::Stop()
 			if (maxConns != 0 && (p->ip == IPADDR_ANY || p->ip == ip))
 			{
 				// already listening, so nothing to do
-				debugPrintfAlways("already listening on port %u\n", port);
+				debugPrintf("already listening on port %u\n", port);
 				return true;
 			}
 			if (maxConns == 0 || ip == IPADDR_ANY)
 			{
 				p->Stop();
-				debugPrintfAlways("stopped listening on port %u\n", port);
+				debugPrintf("stopped listening on port %u\n", port);
 			}
 		}
 		p = n;
@@ -171,7 +160,7 @@ void Listener::Stop()
 	// Don't call tcp_err in the LISTEN state because lwip gives us an assertion failure at tcp.s(1760)
 	p->next = activeList;
 	activeList = p;
-	debugPrintfAlways("listening on port %u\n", port);
+	debugPrintf("listening on port %u\n", port);
 	return true;
 }
 

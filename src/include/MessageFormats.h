@@ -14,19 +14,18 @@
 // If the ESP accepted the command, it then does an appropriate data transfer.
 // The SAM uses DMA to transfer the whole message, so it can only transfer the entire message.
 
-const unsigned int NumWiFiTcpSockets = 8;		// the number of concurrent TCP/IP connections supported
-
 // First the message header formats
 const size_t SsidLength = 32;
 const size_t PasswordLength = 64;
 const size_t HostNameLength = 64;
-const size_t MaxDataLength = 2048;				// maximum length of the data part of an SPI exchange
-const size_t MaxConnections = 8;				// the number of simultaneous connections we support
+const size_t MaxDataLength = 2048;						// maximum length of the data part of an SPI exchange
+const size_t MaxConnections = 8;						// the number of simultaneous connections we support
+const unsigned int NumWiFiTcpSockets = MaxConnections;	// the number of concurrent TCP/IP connections supported
 
 static_assert(MaxDataLength % sizeof(uint32_t) == 0, "MaxDatalength must be a whole number of dwords");
 
 const uint8_t MyFormatVersion = 0x3E;
-const uint8_t InvalidFormatVersion = 0;
+const uint8_t InvalidFormatVersion = 0xC9;		// must be different from any format version we have ever used
 
 const uint32_t AnyIp = 0;
 
@@ -209,7 +208,7 @@ struct ConnStatusResponse
 // Response error codes. A non-negative code is the number of bytes of returned data.
 const int32_t ResponseEmpty = 0;				// used when there is no error and no data to return
 const int32_t ResponseUnknownCommand = -1;
-const int32_t ResponseUnknownFormat = -2;
+const int32_t ResponseBadRequestFormatVersion = -2;
 const int32_t ResponseTooManySsids = -3;
 const int32_t ResponseWrongState = -4;
 const int32_t ResponseBadDataLength = -5;
