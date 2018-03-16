@@ -956,12 +956,13 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			}
 			break;
 
-		case NetworkCommand::diagnostics:				// print some debug info over the UART line
-			stats_display();
+		case NetworkCommand::diagnostics:					// print some debug info over the UART line
 			SendResponse(ResponseEmpty);
+			Connection::ReportConnections();
+			stats_display();
 			break;
 
-		case NetworkCommand::connCreate:				// create a connection
+		case NetworkCommand::connCreate:					// create a connection
 			// Not implemented yet
 		default:
 			SendResponse(ResponseUnknownCommand);
@@ -1122,7 +1123,6 @@ void loop()
 
 	ConnectPoll();
 	Connection::PollOne();
-	Connection::ReportConnections();
 
 	if (currentState == WiFiState::runningAsAccessPoint)
 	{

@@ -247,27 +247,25 @@ size_t Connection::CanRead() const
 
 void Connection::Report()
 {
-#ifdef DEBUG
 	// The following must be kept in the same order as the declarations in class ConnState
 	static const char* const connStateText[] =
 	{
-		"free",
+		"free\n",
 		"connecting",			// socket is trying to connect
 		"connected",			// socket is connected
-		"remoteClosed",		// the other end has closed the connection
+		"remoteClosed",			// the other end has closed the connection
 
 		"aborted",				// an error has occurred
-		"closePending",		// close this socket when sending is complete
+		"closePending",			// close this socket when sending is complete
 		"closeReady"			// about to be closed
 	};
 
 	const unsigned int st = (int)state;
-	debugPrintf(" %s", (st < ARRAY_SIZE(connStateText)) ? connStateText[st]: "unknown");
+	printf("%s", (st < ARRAY_SIZE(connStateText)) ? connStateText[st]: "unknown");
 	if (state != ConnState::free)
 	{
-		debugPrintf(" %u, %u, %u.%u.%u.%u", localPort, remotePort, remoteIp & 255, (remoteIp >> 8) & 255, (remoteIp >> 16) & 255, (remoteIp >> 24) & 255);
+		printf(" %u, %u, %u.%u.%u.%u\n", localPort, remotePort, remoteIp & 255, (remoteIp >> 8) & 255, (remoteIp >> 16) & 255, (remoteIp >> 24) & 255);
 	}
-#endif
 }
 
 // Callback functions
@@ -424,23 +422,15 @@ void Connection::FreePbuf()
 
 /*static*/ void Connection::ReportConnections()
 {
-#ifdef DEBUG
-	if (connectionsChanged)
+	for (size_t i = 0; i < MaxConnections; ++i)
 	{
-		debugPrint("Connections:");
-		for (size_t i = 0; i < MaxConnections; ++i)
-		{
-			connectionList[i]->Report();
-		}
-		debugPrint("\n");
-		connectionsChanged = false;
+		printf("Conn %u: ", i);
+		connectionList[i]->Report();
 	}
-#endif
 }
 
 // Static data
 Connection *Connection::connectionList[MaxConnections] = { 0 };
 size_t Connection::nextConnectionToPoll = 0;
-volatile bool Connection::connectionsChanged = true;
 
 // End

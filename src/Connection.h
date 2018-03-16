@@ -57,7 +57,7 @@ private:
 
 	void SetState(ConnState st)
 	{
-		state = st; connectionsChanged = true;
+		state = st;
 	}
 
 	uint8_t number;
