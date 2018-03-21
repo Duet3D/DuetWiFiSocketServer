@@ -134,7 +134,7 @@ enum class WiFiState : uint8_t
 };
 
 // Message header sent from the ESP to the SAM
-// Note that the last word is sent concurrently with the response from the ESP, so it doesn't get see by the ESP before it secides what response to send
+// Note that the last word is sent concurrently with the response from the ESP, so it doesn't get see by the ESP before it decides what response to send
 struct MessageHeaderEspToSam
 {
 	uint8_t formatVersion;
@@ -183,9 +183,9 @@ enum class ConnState : uint8_t
 	connecting,			// socket is trying to connect
 	connected,			// socket is connected
 	otherEndClosed,		// the remote end has closed the connection
+	aborted,			// an error has occurred
 
 	// The remaining states are not of interest to clients
-	aborted,			// an error has occurred
 	closePending,		// close this socket when sending is complete
 	closeReady			// other end has closed and we were already closePending
 };
