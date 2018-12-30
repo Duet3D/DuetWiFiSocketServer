@@ -28,7 +28,7 @@ public:
 	void GetStatus(ConnStatusResponse& resp) const;
 
 	void Close();
-	void Terminate();
+	void Terminate(bool external);
 	size_t Write(const uint8_t *data, size_t length, bool doPush, bool closeAfterSending);
 	size_t CanWrite() const;
 	size_t Read(uint8_t *data, size_t length);
@@ -77,7 +77,6 @@ private:
 
 	static Connection *connectionList[MaxConnections];
 	static size_t nextConnectionToPoll;
-	static volatile bool connectionsChanged;
 };
 
 #endif /* SRC_CONNECTION_H_ */

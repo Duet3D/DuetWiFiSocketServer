@@ -8,7 +8,7 @@
 #ifndef SRC_MESSAGEFORMATS_H_
 #define SRC_MESSAGEFORMATS_H_
 
-// Message formats exchanges over the SPI link between the SAM4E processor and the ESP8266 on the Duet WiFi
+// Message formats exchanged over the SPI link between the SAM4E processor and the ESP8266 on the Duet WiFi
 // The ESP is the SPI master because it doesn't have a DMA facility. In practice, the ESP initiates an SPI transaction only when the SAM asks it to.
 // The SAM and the ESP first exchange headers. Then the ESP looks at the header, decodes the command from the SAM, and exchanges a response dword.
 // If the ESP accepted the command, it then does an appropriate data transfer.
@@ -22,10 +22,10 @@ const size_t MaxDataLength = 2048;						// maximum length of the data part of an
 const size_t MaxConnections = 8;						// the number of simultaneous connections we support
 const unsigned int NumWiFiTcpSockets = MaxConnections;	// the number of concurrent TCP/IP connections supported
 
-static_assert(MaxDataLength % sizeof(uint32_t) == 0, "MaxDatalength must be a whole number of dwords");
+static_assert(MaxDataLength % sizeof(uint32_t) == 0, "MaxDataLength must be a whole number of dwords");
 
 const uint8_t MyFormatVersion = 0x3E;
-const uint8_t InvalidFormatVersion = 0xC9;		// must be different from any format version we have ever used
+const uint8_t InvalidFormatVersion = 0xC9;				// must be different from any format version we have ever used
 
 const uint32_t AnyIp = 0;
 
@@ -134,7 +134,7 @@ enum class WiFiState : uint8_t
 };
 
 // Message header sent from the ESP to the SAM
-// Note that the last word is sent concurrently with the response from the ESP, so it doesn't get see by the ESP before it decides what response to send
+// Note that the last word is sent concurrently with the response from the ESP. This means that it doesn't get seen by the ESP before it decides what response to send.
 struct MessageHeaderEspToSam
 {
 	uint8_t formatVersion;
@@ -154,7 +154,7 @@ struct NetworkStatusResponse
 	uint32_t ipAddress;				// our own IP address
 	uint32_t freeHeap;				// free heap memory in bytes
 	uint32_t resetReason;
-	uint32_t flashSize;
+	uint32_t flashSize;				// flash size in bytes
 	int8_t rssi;					// received signal strength (if operating as a wifi client)
 	uint8_t numClients;				// the number of connected clients (if operating as an AP)
 	uint8_t sleepMode;				// the wifi sleep mode

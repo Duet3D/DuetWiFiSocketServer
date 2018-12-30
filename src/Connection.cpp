@@ -99,8 +99,11 @@ void Connection::Close()
 	}
 }
 
-// Terminate the connection
-void Connection::Terminate()
+// Terminate the connection.
+// If 'external' is true then the Duet main processor has requested termination, so we free up the connection.
+// Otherwise it has failed because of an internal error, and we set the state to 'aborted'. The Duet main processor will see this and send a termination request,
+// which will free it up.
+void Connection::Terminate(bool external)
 {
 	if (ownPcb != nullptr)
 	{
@@ -112,7 +115,7 @@ void Connection::Terminate()
 	}
 	unAcked = 0;
 	FreePbuf();
-	SetState(ConnState::free);
+	SetState((external) ? ConnState::free : ConnState::aborted);
 }
 
 // Perform housekeeping tasks
@@ -124,7 +127,7 @@ void Connection::Poll()
 		if (writeTimer > 0 && millis() - writeTimer >= MaxWriteTime)
 		{
 			// Terminate it
-			Terminate();
+			Terminate(false);
 		}
 	}
 	else if (state == ConnState::closeReady)
@@ -142,47 +145,53 @@ void Connection::Poll()
 		}
 		else if (millis() - closeTimer >= MaxAckTime)
 		{
-			// The acknowledgment timer has expired, abort this connection
-			Terminate();
+			// The acknowledgement timer has expired, abort this connection
+			Terminate(false);
 		}
 	}
 }
 
 // Write data to the connection. The amount of data may be zero.
+// A note about writing:
+// - LWIP is compiled with option LWIP_NETIF_TX_SINGLE_PBUF set. A comment says this is mandatory for the ESP8266.
+// - A side effect of this is that when we call tcp_write, the data is always copied even if we don't set the TCP_WRITE_FLAG_COPY flag.
+// - The PBUFs used to copy the outgoing data into are always large enough to accommodate the MSS. The total allocation size per PBUF is 1560 bytes.
+// - Sending a full 2K of data may require 2 of these PBUFs to be allocated.
+// - Due to memory fragmentation and other pending packets, this allocation is sometimes fails if we are serving more than 2 files at a time.
+// - The result returned by tcp_sndbuf doesn't take account of the possibility that this allocation may fail.
+// - When it receives a write request from the Duet main processor, our socket server has to say how much data it can accept before accepting it.
+// - So in version 1.21 it sometimes happened that we accept some data based on the amount that tcp_sndbuf say we can, but we can't actually send it.
+// - We then terminate the connection, and the client request fails.
+// To mitigate this we could:
+// - Have one overflow write buffer, shared between all connections
+// - Only accept write data from the Duet main processor if the overflow buffer is free
+// - If after accepting data from the Duet main processor we find that we can't send it, we send some of it if we can and store the rest in the overflow buffer
+// - Then we push any pending data that we already have, and in Poll() we try to send the data in overflow buffer
+// - When the overflow buffer is empty again, we can start accepting write data from the Duet main processor again.
+// A further mitigation would be to restrict the amount of data we accept so some amount that will fit in the MSS, then tcp_write will need to allocate at most one PBUF.
+// However, another reason why tcp_write can fail is because MEMP_NUM_TCP_SEG is set too low in Lwip. It now appears that this is the maoin cause of files tcp_write
+// call in version 1.21. So I have increased it from 10 to 16, which seems to have fixed the problem..
 size_t Connection::Write(const uint8_t *data, size_t length, bool doPush, bool closeAfterSending)
 {
-	// Can we write anything at all?
-	if (CanWrite() == 0)
+	if (state != ConnState::connected)
 	{
-		if (writeTimer == 0)
-		{
-			// No - there is no space left. Don't wait forever until there is any available
-			writeTimer = millis();
-		}
 		return 0;
 	}
 
-	// Send one SPI packet at once
+	// Try to send all the data
 	const bool push = doPush || closeAfterSending;
 	err_t result = tcp_write(ownPcb, data, length, push ? TCP_WRITE_FLAG_COPY : TCP_WRITE_FLAG_COPY | TCP_WRITE_FLAG_MORE);
-	if (result == ERR_OK)
+	if (result != ERR_OK)
 	{
-		// Data could be successfully written
-		writeTimer = 0;
-		unAcked += length;
-	}
-	else
-	{
-		// Something went wrong. Let the main firmware deal with this
-#if LWIP_VERSION_MAJOR == 2
-		// chrishamm: Not sure if this helps with LwIP v1.4.3 but it is mandatory for proper error handling with LwIP 2.0.3
-		tcp_abort(ownPcb);
-		ownPcb = nullptr;
-		SetState(ConnState::aborted);
-		FreePbuf();
-#endif
+		// We failed to write the data. See above for possible mitigations. For now we just terminate the connection.
+		debugPrintf("wr fail len=%u err=%d\n", length, (int)result);
+		Terminate(false);		// chrishamm: Not sure if this helps with LwIP v1.4.3 but it is mandatory for proper error handling with LwIP 2.0.3
 		return 0;
 	}
+
+	// Data was successfully written
+	writeTimer = 0;
+	unAcked += length;
 
 	// See if we need to push the remaining data
 	if (push || tcp_sndbuf(ownPcb) <= TCP_SNDLOWAT)
@@ -202,6 +211,7 @@ size_t Connection::Write(const uint8_t *data, size_t length, bool doPush, bool c
 size_t Connection::CanWrite() const
 {
 	// Return the amount of free space in the write buffer
+	// Note: we cannot necessarily write this amount, because it depends on memory allocations being successful.
 	return (state == ConnState::connected) ? tcp_sndbuf(ownPcb) : 0;
 }
 
@@ -250,7 +260,7 @@ void Connection::Report()
 	// The following must be kept in the same order as the declarations in class ConnState
 	static const char* const connStateText[] =
 	{
-		"free\n",
+		"free",
 		"connecting",			// socket is trying to connect
 		"connected",			// socket is connected
 		"remoteClosed",			// the other end has closed the connection
@@ -261,10 +271,10 @@ void Connection::Report()
 	};
 
 	const unsigned int st = (int)state;
-	printf("%s", (st < ARRAY_SIZE(connStateText)) ? connStateText[st]: "unknown");
+	ets_printf("%s", (st < ARRAY_SIZE(connStateText)) ? connStateText[st]: "unknown");
 	if (state != ConnState::free)
 	{
-		printf(" %u, %u, %u.%u.%u.%u\n", localPort, remotePort, remoteIp & 255, (remoteIp >> 8) & 255, (remoteIp >> 16) & 255, (remoteIp >> 24) & 255);
+		ets_printf(" %u, %u, %u.%u.%u.%u", localPort, remotePort, remoteIp & 255, (remoteIp >> 8) & 255, (remoteIp >> 16) & 255, (remoteIp >> 24) & 255);
 	}
 }
 
@@ -288,10 +298,14 @@ int Connection::Accept(tcp_pcb *pcb)
 
 void Connection::ConnError(int err)
 {
-	tcp_sent(ownPcb, nullptr);
-	tcp_recv(ownPcb, nullptr);
-	tcp_err(ownPcb, nullptr);
-	ownPcb = nullptr;
+	if (ownPcb != nullptr)
+	{
+		tcp_sent(ownPcb, nullptr);
+		tcp_recv(ownPcb, nullptr);
+		tcp_err(ownPcb, nullptr);
+		ownPcb = nullptr;
+	}
+	FreePbuf();
 	SetState(ConnState::aborted);
 }
 
@@ -319,7 +333,7 @@ int Connection::ConnRecv(pbuf *p, int err)
 		pb = p;
 		readIndex = alreadyRead = 0;
 	}
-	debugPrint("Packet rcvd\n");
+	//debugPrint("Packet rcvd\n");
 	return ERR_OK;
 }
 
@@ -399,7 +413,7 @@ void Connection::FreePbuf()
 {
 	for (size_t i = 0; i < MaxConnections; ++i)
 	{
-		Connection::Get(i).Terminate();
+		Connection::Get(i).Terminate(true);
 	}
 }
 
@@ -422,11 +436,13 @@ void Connection::FreePbuf()
 
 /*static*/ void Connection::ReportConnections()
 {
+	ets_printf("Conns");
 	for (size_t i = 0; i < MaxConnections; ++i)
 	{
-		printf("Conn %u: ", i);
+		ets_printf("%c %u:", (i == 0) ? ':' : ',', i);
 		connectionList[i]->Report();
 	}
+	ets_printf("\n");
 }
 
 // Static data

@@ -884,7 +884,7 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			if (ValidSocketNumber(messageHeaderIn.hdr.socketNumber))
 			{
 				messageHeaderIn.hdr.param32 = hspi.transfer32(ResponseEmpty);
-				Connection::Get(messageHeaderIn.hdr.socketNumber).Terminate();
+				Connection::Get(messageHeaderIn.hdr.socketNumber).Terminate(true);
 			}
 			else
 			{
@@ -923,13 +923,13 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			{
 				Connection& conn = Connection::Get(messageHeaderIn.hdr.socketNumber);
 				const size_t requestedlength = messageHeaderIn.hdr.dataLength;
-				const size_t amount = std::min<size_t>(conn.CanWrite(), std::min<size_t>(requestedlength, MaxDataLength));
-				const bool closeAfterSending = amount == requestedlength && (messageHeaderIn.hdr.flags & MessageHeaderSamToEsp::FlagCloseAfterWrite) != 0;
-				const bool push = amount == requestedlength && (messageHeaderIn.hdr.flags & MessageHeaderSamToEsp::FlagPush) != 0;
-				messageHeaderIn.hdr.param32 = hspi.transfer32(amount);
-				hspi.transferDwords(nullptr, transferBuffer, NumDwords(amount));
-				const size_t written = conn.Write(reinterpret_cast<uint8_t *>(transferBuffer), amount, push, closeAfterSending);
-				if (written != amount)
+				const size_t acceptedLength = std::min<size_t>(conn.CanWrite(), std::min<size_t>(requestedlength, MaxDataLength));
+				const bool closeAfterSending = (acceptedLength == requestedlength) && (messageHeaderIn.hdr.flags & MessageHeaderSamToEsp::FlagCloseAfterWrite) != 0;
+				const bool push = (acceptedLength == requestedlength) && (messageHeaderIn.hdr.flags & MessageHeaderSamToEsp::FlagPush) != 0;
+				messageHeaderIn.hdr.param32 = hspi.transfer32(acceptedLength);
+				hspi.transferDwords(nullptr, transferBuffer, NumDwords(acceptedLength));
+				const size_t written = conn.Write(reinterpret_cast<uint8_t *>(transferBuffer), acceptedLength, push, closeAfterSending);
+				if (written != acceptedLength)
 				{
 					lastError = "incomplete write";
 				}
@@ -958,8 +958,7 @@ void ICACHE_RAM_ATTR ProcessRequest()
 
 		case NetworkCommand::diagnostics:					// print some debug info over the UART line
 			SendResponse(ResponseEmpty);
-			Connection::ReportConnections();
-			stats_display();
+			deferCommand = true;							// we need to send the diagnostics after we have sent the response, so the SAM is ready to receive them
 			break;
 
 		case NetworkCommand::connCreate:					// create a connection
@@ -1030,6 +1029,12 @@ void ICACHE_RAM_ATTR ProcessRequest()
 
 		case NetworkCommand::networkFactoryReset:			// clear remembered list, reset factory defaults
 			FactoryReset();
+			break;
+
+		case NetworkCommand::diagnostics:
+			Connection::ReportConnections();
+			delay(20);										// give the Duet main processor time to digest that
+			stats_display();
 			break;
 
 		default:
