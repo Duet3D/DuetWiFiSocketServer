@@ -8,25 +8,24 @@
 #ifndef SRC_MESSAGEFORMATS_H_
 #define SRC_MESSAGEFORMATS_H_
 
-// Message formats exchanges over the SPI link between the SAM4E processor and the ESP8266 on the Duet WiFi
+// Message formats exchanged over the SPI link between the SAM4E processor and the ESP8266 on the Duet WiFi
 // The ESP is the SPI master because it doesn't have a DMA facility. In practice, the ESP initiates an SPI transaction only when the SAM asks it to.
 // The SAM and the ESP first exchange headers. Then the ESP looks at the header, decodes the command from the SAM, and exchanges a response dword.
 // If the ESP accepted the command, it then does an appropriate data transfer.
 // The SAM uses DMA to transfer the whole message, so it can only transfer the entire message.
 
-const unsigned int NumTcpSockets = 8;			// the number of concurrent TCP/IP connections supported
-
 // First the message header formats
 const size_t SsidLength = 32;
 const size_t PasswordLength = 64;
 const size_t HostNameLength = 64;
-const size_t MaxDataLength = 2048;				// maximum length of the data part of an SPI exchange
-const size_t MaxConnections = 8;				// the number of simultaneous connections we support
+const size_t MaxDataLength = 2048;						// maximum length of the data part of an SPI exchange
+const size_t MaxConnections = 8;						// the number of simultaneous connections we support
+const unsigned int NumWiFiTcpSockets = MaxConnections;	// the number of concurrent TCP/IP connections supported
 
-static_assert(MaxDataLength % sizeof(uint32_t) == 0, "MaxDatalength must be a whole number of dwords");
+static_assert(MaxDataLength % sizeof(uint32_t) == 0, "MaxDataLength must be a whole number of dwords");
 
 const uint8_t MyFormatVersion = 0x3E;
-const uint8_t InvalidFormatVersion = 0;
+const uint8_t InvalidFormatVersion = 0xC9;				// must be different from any format version we have ever used
 
 const uint32_t AnyIp = 0;
 
@@ -49,8 +48,8 @@ enum class NetworkCommand : uint8_t
 	connWrite,					// write data to a connection
 	connGetStatus,				// get the status of a connection
 
-	networkListen,				// listen for incoming connections to a port
-	networkStopListening,		// stop listening for connections to a port
+	networkListen,				// listen for incoming connections to a port, or stop listening
+	unused_networkStopListening, // stop listening for connections to a port
 
 	networkGetStatus,			// get the network connection status
 	networkAddSsid,				// add to our known access point list
@@ -86,6 +85,8 @@ struct MessageHeaderSamToEsp
 
 const size_t headerDwords = SIZE_IN_DWORDS(MessageHeaderSamToEsp);
 
+// Message data sent from SAM to ESP for a connCreate, networkListen or networkStopListening command
+// For a networkStopListening command, only the port number is used
 struct ListenOrConnectData
 {
 	uint32_t remoteIp;			// IP address to listen for, 0 means any
@@ -94,6 +95,11 @@ struct ListenOrConnectData
 	uint16_t port;				// port number to listen on
 	uint16_t maxConnections;	// maximum number of connections to accept if listening
 };
+
+const uint8_t protocolHTTP = 0;
+const uint8_t protocolFTP = 1;
+const uint8_t protocolTelnet = 2;
+const uint8_t protocolFtpData = 3;
 
 // Message data sent from SAM to ESP to add an SSID or set the access point configuration. This is also the format of a remembered SSID entry.
 struct WirelessConfigurationData
@@ -128,7 +134,7 @@ enum class WiFiState : uint8_t
 };
 
 // Message header sent from the ESP to the SAM
-// Note that the last word is sent concurrently with the response from the ESP, so it doesn't get see by the ESP before it secides what response to send
+// Note that the last word is sent concurrently with the response from the ESP. This means that it doesn't get seen by the ESP before it decides what response to send.
 struct MessageHeaderEspToSam
 {
 	uint8_t formatVersion;
@@ -148,7 +154,7 @@ struct NetworkStatusResponse
 	uint32_t ipAddress;				// our own IP address
 	uint32_t freeHeap;				// free heap memory in bytes
 	uint32_t resetReason;
-	uint32_t flashSize;
+	uint32_t flashSize;				// flash size in bytes
 	int8_t rssi;					// received signal strength (if operating as a wifi client)
 	uint8_t numClients;				// the number of connected clients (if operating as an AP)
 	uint8_t sleepMode;				// the wifi sleep mode
@@ -177,9 +183,9 @@ enum class ConnState : uint8_t
 	connecting,			// socket is trying to connect
 	connected,			// socket is connected
 	otherEndClosed,		// the remote end has closed the connection
+	aborted,			// an error has occurred
 
 	// The remaining states are not of interest to clients
-	aborted,			// an error has occurred
 	closePending,		// close this socket when sending is complete
 	closeReady			// other end has closed and we were already closePending
 };
@@ -202,7 +208,7 @@ struct ConnStatusResponse
 // Response error codes. A non-negative code is the number of bytes of returned data.
 const int32_t ResponseEmpty = 0;				// used when there is no error and no data to return
 const int32_t ResponseUnknownCommand = -1;
-const int32_t ResponseUnknownFormat = -2;
+const int32_t ResponseBadRequestFormatVersion = -2;
 const int32_t ResponseTooManySsids = -3;
 const int32_t ResponseWrongState = -4;
 const int32_t ResponseBadDataLength = -5;

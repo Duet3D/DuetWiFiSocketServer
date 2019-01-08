@@ -5,7 +5,7 @@
 
 #define NO_WIFI_SLEEP	0
 
-#define VERSION_MAIN	"1.20b10"
+#define VERSION_MAIN	"1.22"
 
 #if NO_WIFI_SLEEP
 #define VERSION_SLEEP	"-nosleep"
@@ -21,8 +21,8 @@
 
 const char* const firmwareVersion = VERSION_MAIN VERSION_DEBUG VERSION_SLEEP;
 
-// Define the maximum length (bytes) of file upload data per SPI packet. Use a multiple of the SD card file or cluster size for efficiency.
-// ************ This must be kept in step with the corresponding value in RepRapFirmwareWiFi *************
+// Define the maximum length (bytes) of file upload data per SPI packet. Use a multiple of the SD card sector or cluster size for efficiency.
+// ************ This must be kept in step with the corresponding value in RepRapFirmware *************
 const uint32_t maxSpiFileData = 2048;
 
 // Define the SPI clock frequency
@@ -39,11 +39,14 @@ const uint8_t Backlog = 8;
 #define ARRAY_SIZE(_x) (sizeof(_x)/sizeof((_x)[0]))
 
 #ifdef DEBUG
-#define debugPrint(_str)		ets_printf("%s", _str)
-#define debugPrintf(_format, ...)	ets_printf(_format, __VA_ARGS__)
+#define debugPrint(_str)			ets_printf("%s(%d): %s", __FILE__, __LINE__, _str)
+#define debugPrintf(_format, ...)	ets_printf("%s(%d): ", __FILE__, __LINE__); ets_printf(_format, __VA_ARGS__)
 #else
-#define debugPrint(_format)		do {} while(false)
+#define debugPrint(_format)			do {} while(false)
 #define debugPrintf(_format, ...)	do {} while(false)
 #endif
+
+#define debugPrintAlways(_str)			ets_printf("%s(%d): %s", __FILE__, __LINE__, _str)
+#define debugPrintfAlways(_format, ...)	ets_printf("%s(%d): ", __FILE__, __LINE__); ets_printf(_format, __VA_ARGS__)
 
 #endif

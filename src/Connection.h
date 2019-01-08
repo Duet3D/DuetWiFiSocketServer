@@ -17,7 +17,6 @@
 // If we #include "tcp.h" here we get clashes between two different ip_addr.h files, so don't do that here
 class tcp_pcb;
 class pbuf;
-typedef signed char err_t;					// compatible with lwip's s8_t
 
 class Connection
 {
@@ -29,7 +28,7 @@ public:
 	void GetStatus(ConnStatusResponse& resp) const;
 
 	void Close();
-	void Terminate();
+	void Terminate(bool external);
 	size_t Write(const uint8_t *data, size_t length, bool doPush, bool closeAfterSending);
 	size_t CanWrite() const;
 	size_t Read(uint8_t *data, size_t length);
@@ -37,10 +36,10 @@ public:
 	void Poll();
 
 	// Callback functions
-	err_t Accept(tcp_pcb *pcb);
-	void ConnError(err_t err);
-	err_t ConnRecv(pbuf *p, err_t err);
-	err_t ConnSent(uint16_t len);
+	int Accept(tcp_pcb *pcb);
+	void ConnError(int err);
+	int ConnRecv(pbuf *p, int err);
+	int ConnSent(uint16_t len);
 
 	// Static functions
 	static void Init();
@@ -58,7 +57,7 @@ private:
 
 	void SetState(ConnState st)
 	{
-		state = st; connectionsChanged = true;
+		state = st;
 	}
 
 	uint8_t number;
@@ -78,7 +77,6 @@ private:
 
 	static Connection *connectionList[MaxConnections];
 	static size_t nextConnectionToPoll;
-	static volatile bool connectionsChanged;
 };
 
 #endif /* SRC_CONNECTION_H_ */

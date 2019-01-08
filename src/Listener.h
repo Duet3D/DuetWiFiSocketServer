@@ -14,13 +14,12 @@
 // If we #include "tcp.h" here we get clashes between two different ip_addr.h files, so don't do that here
 class tcp_pcb;
 class pbuf;
-typedef signed char err_t;					// compatible with lwip's s8_t
 
 class Listener
 {
 public:
 	Listener();
-	err_t Accept(tcp_pcb *pcb);
+	int Accept(tcp_pcb *pcb);
 
 	static void Init() { }
 	static bool Listen(uint32_t ip, uint16_t port, uint8_t protocol, uint16_t maxConns);

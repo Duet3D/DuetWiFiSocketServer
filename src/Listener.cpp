@@ -9,10 +9,13 @@
 #include "Connection.h"
 #include "Config.h"
 
+#include <HardwareSerial.h>
+
 // C interface functions
 extern "C"
 {
 	#include "lwip/tcp.h"
+	#include "lwip/err.h"
 
 	static err_t conn_accept(void *arg, tcp_pcb *pcb, err_t err)
 	{
@@ -26,7 +29,6 @@ extern "C"
 	}
 }
 
-
 // Static member data
 Listener *Listener::activeList = nullptr;
 Listener *Listener::freeList = nullptr;
@@ -37,23 +39,38 @@ Listener::Listener()
 {
 }
 
-err_t Listener::Accept(tcp_pcb *pcb)
+int Listener::Accept(tcp_pcb *pcb)
 {
 	if (listeningPcb != nullptr)
 	{
 		// Allocate a free socket for this connection
-		if (Connection::CountConnectionsOnPort(port) < maxConnections)
+		const uint16_t numConns = Connection::CountConnectionsOnPort(port);
+		if (numConns < maxConnections)
 		{
 			Connection * const conn = Connection::Allocate();
 			if (conn != nullptr)
 			{
-				tcp_accepted(listeningPcb);		// keep the listening PCB running
-				return conn->Accept(pcb);
+				tcp_accepted(listeningPcb);		// tell the listening PCB we have accepted the connection
+				const int rslt = conn->Accept(pcb);
+				if (protocol == protocolFtpData)
+				{
+					debugPrintf("accept conn, stop listen on port %u\n", port);
+					Stop();						// don't listen for further connections
+				}
+				return rslt;
 			}
+			debugPrintfAlways("refused conn on port %u no free conn\n", port);
+		}
+		else
+		{
+			debugPrintfAlways("refused conn on port %u already %u conns\n", port, numConns);
 		}
 	}
+	else
+	{
+		debugPrintfAlways("refused conn on port %u no pcb\n", port);
+	}
 	tcp_abort(pcb);
-	debugPrint("Refused conn\n");
 	return ERR_ABRT;
 }
 
@@ -65,9 +82,11 @@ void Listener::Stop()
 		tcp_close(listeningPcb);			// stop listening and free the PCB
 		listeningPcb = nullptr;
 	}
+	Unlink(this);
+	Release(this);
 }
 
-// Set up a listener on a port, returning true if successful
+// Set up a listener on a port, returning true if successful, or stop listening of maxConnections = 0
 /*static*/ bool Listener::Listen(uint32_t ip, uint16_t port, uint8_t protocol, uint16_t maxConns)
 {
 	// See if we are already listing for this
@@ -76,25 +95,31 @@ void Listener::Stop()
 		Listener *n = p->next;
 		if (p->port == port)
 		{
-			if (p->ip == IPADDR_ANY || p->ip == ip)
+			if (maxConns != 0 && (p->ip == IPADDR_ANY || p->ip == ip))
 			{
 				// already listening, so nothing to do
+				debugPrintf("already listening on port %u\n", port);
 				return true;
 			}
-			if (ip == IPADDR_ANY)
+			if (maxConns == 0 || ip == IPADDR_ANY)
 			{
 				p->Stop();
-				Unlink(p);
-				Release(p);
+				debugPrintf("stopped listening on port %u\n", port);
 			}
 		}
 		p = n;
+	}
+
+	if (maxConns == 0)
+	{
+		return true;
 	}
 
 	// If we get here then we need to set up a new listener
 	Listener * const p = Allocate();
 	if (p == nullptr)
 	{
+		debugPrintAlways("can't allocate listener\n");
 		return false;
 	}
 	p->ip = ip;
@@ -107,16 +132,19 @@ void Listener::Stop()
 	if (tempPcb == nullptr)
 	{
 		Release(p);
+		debugPrintAlways("can't allocate PCB\n");
 		return false;
 	}
 
-	ip_addr tempIp;
+	ip_addr_t tempIp;
 	tempIp.addr = ip;
 	tempPcb->so_options |= SOF_REUSEADDR;			// not sure we need this, but the Arduino HTTP server does it
-	if (tcp_bind(tempPcb, &tempIp, port) != ERR_OK)
+	err_t rc = tcp_bind(tempPcb, &tempIp, port);
+	if (rc != ERR_OK)
 	{
 		tcp_close(tempPcb);
 		Release(p);
+		debugPrintfAlways("can't bind PCB: %d\n", (int)rc);
 		return false;
 	}
 	p->listeningPcb = tcp_listen_with_backlog(tempPcb, Backlog);
@@ -124,12 +152,15 @@ void Listener::Stop()
 	{
 		tcp_close(tempPcb);
 		Release(p);
+		debugPrintAlways("tcp_listen failed\n");
 		return false;
 	}
 	tcp_arg(p->listeningPcb, p);
 	tcp_accept(p->listeningPcb, conn_accept);
+	// Don't call tcp_err in the LISTEN state because lwip gives us an assertion failure at tcp.s(1760)
 	p->next = activeList;
 	activeList = p;
+	debugPrintf("listening on port %u\n", port);
 	return true;
 }
 
@@ -142,8 +173,6 @@ void Listener::Stop()
 		if (port == 0 || port == p->port)
 		{
 			p->Stop();
-			Unlink(p);
-			Release(p);
 		}
 		p = n;
 	}

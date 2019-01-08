@@ -9,9 +9,22 @@
 #undef yield
 #undef array
 
+extern "C"
+{
+	#include "user_interface.h"     // for struct rst_info
+	#include "lwip/init.h"			// for version info
+	#include "lwip/stats.h"			// for stats_display()
+
+#if LWIP_VERSION_MAJOR == 2
+	#include "lwip/apps/mdns.h"
+	#include "lwip/apps/netbiosns.h"
+#else
+	#include "lwip/app/netbios.h"	// for NetBIOS support
+#endif
+}
+
 #include <cstdarg>
 #include <ESP8266WiFi.h>
-#include <ESP8266mDNS.h>
 #include <DNSServer.h>
 #include <EEPROM.h>
 #include "SocketServer.h"
@@ -24,12 +37,18 @@
 #include "Listener.h"
 #include "Misc.h"
 
-extern "C"
-{
-	#include "user_interface.h"     // for struct rst_info
-	#include "lwip/stats.h"			// for stats_display()
-	#include "lwip/app/netbios.h"	// for NetBIOS support
-}
+const unsigned int ONBOARD_LED = D4;				// GPIO 2
+const bool ONBOARD_LED_ON = false;					// active low
+const uint32_t ONBOARD_LED_BLINK_INTERVAL = 500;	// ms
+
+#if LWIP_VERSION_MAJOR == 2
+const char * const MdnsProtocolNames[3] = { "HTTP", "FTP", "Telnet" };
+const char * const MdnsServiceStrings[3] = { "_http", "_ftp", "_telnet" };
+const char * const MdnsTxtRecords[2] = { "product=DuetWiFi", "version=" VERSION_MAIN };
+const unsigned int MdnsTtl = 10 * 60;			// same value as on the Duet 0.6/0.8.5
+#else
+# include <ESP8266mDNS.h>
+#endif
 
 #define array _ecv_array
 
@@ -53,6 +72,7 @@ static char lastConnectError[100];
 static WiFiState currentState = WiFiState::idle,
 				prevCurrentState = WiFiState::disabled,
 				lastReportedState = WiFiState::disabled;
+static uint32_t lastBlinkTime = 0;
 
 ADC_MODE(ADC_VCC);          // need this for the ESP.getVcc() call to work
 
@@ -96,10 +116,10 @@ bool FindEmptySsidEntry(int *index)
 	return false;
 }
 
-// Check socket number in range, returning trus if yes. Otherwise, set lastError and return false;
+// Check socket number in range, returning true if yes. Otherwise, set lastError and return false;
 bool ValidSocketNumber(uint8_t num)
 {
-	if (num < NumTcpSockets)
+	if (num < MaxConnections)
 	{
 		return true;
 	}
@@ -195,11 +215,16 @@ void ConnectPoll()
 			}
 			else
 			{
+#if LWIP_VERSION_MAJOR == 2
+				mdns_resp_netif_settings_changed(netif_list);	// STA is on first interface
+#else
 				MDNS.begin(webHostName);
+#endif
 			}
-			currentState = WiFiState::connected;
-			debugPrint("Connected to AP\n");
 
+			debugPrint("Connected to AP\n");
+			currentState = WiFiState::connected;
+			digitalWrite(ONBOARD_LED, ONBOARD_LED_ON);
 			break;
 
 		default:
@@ -220,6 +245,7 @@ void ConnectPoll()
 			{
 				WiFi.mode(WIFI_OFF);
 				currentState = WiFiState::idle;
+				digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 			}
 		}
 		break;
@@ -245,6 +271,7 @@ void ConnectPoll()
 			case STATION_WRONG_PASSWORD:
 				error = "state 'wrong password'";
 				currentState = WiFiState::idle;
+				digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 				break;
 
 			case STATION_NO_AP_FOUND:
@@ -260,6 +287,7 @@ void ConnectPoll()
 			default:
 				error = "unknown WiFi state";
 				currentState = WiFiState::idle;
+				digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 				break;
 			}
 
@@ -314,6 +342,7 @@ pre(currentState == WiFiState::idle)
 		{
 			lastError = "network scan failed";
 			currentState = WiFiState::idle;
+			digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 			return;
 		}
 
@@ -321,6 +350,7 @@ pre(currentState == WiFiState::idle)
 		int8_t strongestNetwork = -1;
 		for (int8_t i = 0; i < num_ssids; ++i)
 		{
+			debugPrintfAlways("found network %s\n", WiFi.SSID(i).c_str());
 			if (strongestNetwork < 0 || WiFi.RSSI(i) > WiFi.RSSI(strongestNetwork))
 			{
 				const WirelessConfigurationData *wp = RetrieveSsidData(WiFi.SSID(i).c_str(), nullptr);
@@ -416,12 +446,19 @@ void StartAccessPoint()
 			}
 			SafeStrncpy(currentSsid, apData.ssid, ARRAY_SIZE(currentSsid));
 			currentState = WiFiState::runningAsAccessPoint;
+			digitalWrite(ONBOARD_LED, ONBOARD_LED_ON);
+#if LWIP_VERSION_MAJOR == 2
+			mdns_resp_netif_settings_changed(netif_list->next);		// AP is on second interface
+#else
+			MDNS.begin(webHostName);
+#endif
 		}
 		else
 		{
 			lastError = "Failed to start access point";
 			debugPrintf("%s\n", lastError);
 			currentState = WiFiState::idle;
+			digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 		}
 	}
 	else
@@ -429,6 +466,7 @@ void StartAccessPoint()
 		lastError = "invalid access point configuration";
 		debugPrintf("%s\n", lastError);
 		currentState = WiFiState::idle;
+		digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 	}
 }
 
@@ -443,6 +481,49 @@ static union
 	MessageHeaderEspToSam hdr;
 	uint32_t asDwords[headerDwords];	// to force alignment
 } messageHeaderOut;
+
+#if LWIP_VERSION_MAJOR == 2
+
+void GetServiceTxtEntries(struct mdns_service *service, void *txt_userdata)
+{
+	for (size_t i = 0; i < ARRAY_SIZE(MdnsTxtRecords); i++)
+	{
+		mdns_resp_add_service_txtitem(service, MdnsTxtRecords[i], strlen(MdnsTxtRecords[i]));
+	}
+}
+
+// Rebuild the mDNS services
+void RebuildServices()
+{
+	for (struct netif *item = netif_list; item != nullptr; item = item->next)
+	{
+		mdns_resp_remove_netif(item);
+		mdns_resp_add_netif(item, webHostName, MdnsTtl);
+		mdns_resp_add_service(item, "echo", "_echo", DNSSD_PROTO_TCP, 0, 0, nullptr, nullptr);
+
+		for (size_t protocol = 0; protocol < 3; protocol++)
+		{
+			const uint16_t port = Listener::GetPortByProtocol(protocol);
+			if (port != 0)
+			{
+				service_get_txt_fn_t txtFunc = (protocol == 0/*HttpProtocol*/) ? GetServiceTxtEntries : nullptr;
+				mdns_resp_add_service(item, webHostName, MdnsServiceStrings[protocol], DNSSD_PROTO_TCP, port, MdnsTtl, txtFunc, nullptr);
+			}
+		}
+
+		mdns_resp_netif_settings_changed(item);
+	}
+}
+
+void RemoveMdnsServices()
+{
+	for (struct netif *item = netif_list; item != nullptr; item = item->next)
+	{
+		mdns_resp_remove_netif(item);
+	}
+}
+
+#else
 
 // Rebuild the MDNS server to advertise a single service
 void AdvertiseService(int service, uint16_t port)
@@ -486,6 +567,8 @@ void RebuildServices()
 	}
 }
 
+#endif
+
 // Send a response.
 // 'response' is the number of byes of response if positive, or the error code if negative.
 // Use only to respond to commands which don't include a data block, or when we don't want to read the data block.
@@ -501,7 +584,8 @@ void ICACHE_RAM_ATTR SendResponse(int32_t response)
 // This is called when the SAM is asking to transfer data
 void ICACHE_RAM_ATTR ProcessRequest()
 {
-	// Set up our own header
+	// Set up our own headers
+	messageHeaderIn.hdr.formatVersion = InvalidFormatVersion;
 	messageHeaderOut.hdr.formatVersion = MyFormatVersion;
 	messageHeaderOut.hdr.state = currentState;
 	bool deferCommand = false;
@@ -512,11 +596,10 @@ void ICACHE_RAM_ATTR ProcessRequest()
 
 	// Exchange headers, except for the last dword which will contain our response
 	hspi.transferDwords(messageHeaderOut.asDwords, messageHeaderIn.asDwords, headerDwords - 1);
-	const size_t dataBufferAvailable = std::min<size_t>(messageHeaderIn.hdr.dataBufferAvailable, MaxDataLength);
 
 	if (messageHeaderIn.hdr.formatVersion != MyFormatVersion)
 	{
-		SendResponse(ResponseUnknownFormat);
+		SendResponse(ResponseBadRequestFormatVersion);
 	}
 	else if (messageHeaderIn.hdr.dataLength > MaxDataLength)
 	{
@@ -524,6 +607,8 @@ void ICACHE_RAM_ATTR ProcessRequest()
 	}
 	else
 	{
+		const size_t dataBufferAvailable = std::min<size_t>(messageHeaderIn.hdr.dataBufferAvailable, MaxDataLength);
+
 		// See what command we have received and take appropriate action
 		switch (messageHeaderIn.hdr.command)
 		{
@@ -580,14 +665,14 @@ void ICACHE_RAM_ATTR ProcessRequest()
 										: (runningAsStation)
 										  ? static_cast<uint32_t>(WiFi.localIP())
 											  : 0;
-				response->freeHeap = ESP.getFreeHeap();
-				response->resetReason = ESP.getResetInfoPtr()->reason;
-				response->flashSize = ESP.getFlashChipRealSize();
+				response->freeHeap = system_get_free_heap_size();
+				response->resetReason = system_get_rst_info()->reason;
+				response->flashSize = 1u << ((spi_flash_get_id() >> 16) & 0xFF);
 				response->rssi = (runningAsStation) ? wifi_station_get_rssi() : 0;
 				response->numClients = (runningAsAp) ? wifi_softap_get_station_num() : 0;
 				response->sleepMode = (uint8_t)wifi_get_sleep_type() + 1;
 				response->spare = 0;
-				response->vcc = ESP.getVcc();
+				response->vcc = system_get_vdd33();
 			    wifi_get_macaddr((runningAsAp) ? SOFTAP_IF : STATION_IF, response->macAddress);
 			    SafeStrncpy(response->versionText, firmwareVersion, sizeof(response->versionText));
 			    SafeStrncpy(response->hostName, webHostName, sizeof(response->hostName));
@@ -726,6 +811,9 @@ void ICACHE_RAM_ATTR ProcessRequest()
 				hspi.transferDwords(nullptr, transferBuffer, NumDwords(HostNameLength));
 				memcpy(webHostName, transferBuffer, HostNameLength);
 				webHostName[HostNameLength] = 0;			// ensure null terminator
+#if LWIP_VERSION_MAJOR == 2
+				netbiosns_set_name(webHostName);
+#endif
 			}
 			else
 			{
@@ -764,8 +852,11 @@ void ICACHE_RAM_ATTR ProcessRequest()
 				const bool ok = Listener::Listen(lcData.remoteIp, lcData.port, lcData.protocol, lcData.maxConnections);
 				if (ok)
 				{
-					RebuildServices();					// update the MDNS services
-					debugPrintf("Listening on port %u\n", lcData.port);
+					if (lcData.protocol < 3)			// if it's FTP, HTTP or Telnet protocol
+					{
+						RebuildServices();				// update the MDNS services
+					}
+					debugPrintf("%sListening on port %u\n", (lcData.maxConnections == 0) ? "Stopped " : "", lcData.port);
 				}
 				else
 				{
@@ -775,11 +866,25 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			}
 			break;
 
+#if 0	// We don't use the following command, instead we use networkListen with maxConnections = 0
+		case NetworkCommand::unused_networkStopListening:
+			if (messageHeaderIn.hdr.dataLength == sizeof(ListenOrConnectData))
+			{
+				messageHeaderIn.hdr.param32 = hspi.transfer32(ResponseEmpty);
+				ListenOrConnectData lcData;
+				hspi.transferDwords(nullptr, reinterpret_cast<uint32_t*>(&lcData), NumDwords(sizeof(lcData)));
+				Listener::StopListening(lcData.port);
+				RebuildServices();						// update the MDNS services
+				debugPrintf("Stopped listening on port %u\n", lcData.port);
+			}
+			break;
+#endif
+
 		case NetworkCommand::connAbort:					// terminate a socket rudely
 			if (ValidSocketNumber(messageHeaderIn.hdr.socketNumber))
 			{
 				messageHeaderIn.hdr.param32 = hspi.transfer32(ResponseEmpty);
-				Connection::Get(messageHeaderIn.hdr.socketNumber).Terminate();
+				Connection::Get(messageHeaderIn.hdr.socketNumber).Terminate(true);
 			}
 			else
 			{
@@ -818,13 +923,13 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			{
 				Connection& conn = Connection::Get(messageHeaderIn.hdr.socketNumber);
 				const size_t requestedlength = messageHeaderIn.hdr.dataLength;
-				const size_t amount = std::min<size_t>(conn.CanWrite(), std::min<size_t>(requestedlength, MaxDataLength));
-				const bool closeAfterSending = amount == requestedlength && (messageHeaderIn.hdr.flags & MessageHeaderSamToEsp::FlagCloseAfterWrite) != 0;
-				const bool push = amount == requestedlength && (messageHeaderIn.hdr.flags & MessageHeaderSamToEsp::FlagPush) != 0;
-				messageHeaderIn.hdr.param32 = hspi.transfer32(amount);
-				hspi.transferDwords(nullptr, transferBuffer, NumDwords(amount));
-				const size_t written = conn.Write(reinterpret_cast<uint8_t *>(transferBuffer), amount, push, closeAfterSending);
-				if (written != amount)
+				const size_t acceptedLength = std::min<size_t>(conn.CanWrite(), std::min<size_t>(requestedlength, MaxDataLength));
+				const bool closeAfterSending = (acceptedLength == requestedlength) && (messageHeaderIn.hdr.flags & MessageHeaderSamToEsp::FlagCloseAfterWrite) != 0;
+				const bool push = (acceptedLength == requestedlength) && (messageHeaderIn.hdr.flags & MessageHeaderSamToEsp::FlagPush) != 0;
+				messageHeaderIn.hdr.param32 = hspi.transfer32(acceptedLength);
+				hspi.transferDwords(nullptr, transferBuffer, NumDwords(acceptedLength));
+				const size_t written = conn.Write(reinterpret_cast<uint8_t *>(transferBuffer), acceptedLength, push, closeAfterSending);
+				if (written != acceptedLength)
 				{
 					lastError = "incomplete write";
 				}
@@ -851,12 +956,13 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			}
 			break;
 
-		case NetworkCommand::diagnostics:				// print some debug info over the UART line
-			stats_display();
+		case NetworkCommand::diagnostics:					// print some debug info over the UART line
 			SendResponse(ResponseEmpty);
+			deferCommand = true;							// we need to send the diagnostics after we have sent the response, so the SAM is ready to receive them
 			break;
 
-		case NetworkCommand::connCreate:				// create a connection
+		case NetworkCommand::connCreate:					// create a connection
+			// Not implemented yet
 		default:
 			SendResponse(ResponseUnknownCommand);
 			break;
@@ -897,12 +1003,19 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			case WiFiState::connected:
 			case WiFiState::connecting:
 			case WiFiState::reconnecting:
+#if LWIP_VERSION_MAJOR == 2
+				RemoveMdnsServices();
+#endif
+#if LWIP_VERSION_MAJOR == 1
 				MDNS.deleteServices();
+#endif
+				delay(20);									// try to give lwip time to recover from stopping everything
 				WiFi.disconnect(true);
 				break;
 
 			case WiFiState::runningAsAccessPoint:
 				dns.stop();
+				delay(20);									// try to give lwip time to recover from stopping everything
 				WiFi.softAPdisconnect(true);
 				break;
 
@@ -911,10 +1024,17 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			}
 			delay(100);
 			currentState = WiFiState::idle;
+			digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
 			break;
 
 		case NetworkCommand::networkFactoryReset:			// clear remembered list, reset factory defaults
 			FactoryReset();
+			break;
+
+		case NetworkCommand::diagnostics:
+			Connection::ReportConnections();
+			delay(20);										// give the Duet main processor time to digest that
+			stats_display();
 			break;
 
 		default:
@@ -930,10 +1050,22 @@ void setup()
 	Serial.begin(WiFiBaudRate);
 	Serial.setDebugOutput(true);
 
+	// Turn off LED
+	pinMode(ONBOARD_LED, OUTPUT);
+	digitalWrite(ONBOARD_LED, !ONBOARD_LED_ON);
+
 	WiFi.mode(WIFI_OFF);
 	WiFi.persistent(false);
 
-	// Reserve some flash space for use as EEPROM. The maximum EEPROM supported by the core is API_FLASH_SEC_SIZE (4Kb).
+	// If we started abnormally, send the exception details to the serial port
+	const rst_info *resetInfo = system_get_rst_info();
+	if (resetInfo->reason != 0 && resetInfo->reason != 6)	// if not power up or external reset
+	{
+		debugPrintfAlways("Restart after exception:%d flag:%d epc1:0x%08x epc2:0x%08x epc3:0x%08x excvaddr:0x%08x depc:0x%08x\n",
+			resetInfo->exccause, resetInfo->reason, resetInfo->epc1, resetInfo->epc2, resetInfo->epc3, resetInfo->excvaddr, resetInfo->depc);
+	}
+
+	// Reserve some flash space for use as EEPROM. The maximum EEPROM supported by the core is SPI_FLASH_SEC_SIZE (4Kb).
 	const size_t eepromSizeNeeded = (MaxRememberedNetworks + 1) * sizeof(WirelessConfigurationData);
 	static_assert(eepromSizeNeeded <= SPI_FLASH_SEC_SIZE, "Insufficient EEPROM");
 	EEPROM.begin(eepromSizeNeeded);
@@ -953,7 +1085,16 @@ void setup()
 
     Connection::Init();
     Listener::Init();
+#if LWIP_VERSION_MAJOR == 2
+    mdns_resp_init();
+	for (struct netif *item = netif_list; item != nullptr; item = item->next)
+	{
+		mdns_resp_add_netif(item, webHostName, MdnsTtl);
+	}
+    netbiosns_init();
+#else
     netbios_init();
+#endif
     lastError = nullptr;
     debugPrint("Init completed\n");
 	digitalWrite(EspReqTransferPin, HIGH);				// tell the SAM we are ready to receive a command
@@ -963,6 +1104,8 @@ void setup()
 void loop()
 {
 	digitalWrite(EspReqTransferPin, HIGH);				// tell the SAM we are ready to receive a command
+	system_soft_wdt_feed();								// kick the watchdog
+
 	if (   (lastError != prevLastError || connectErrorChanged || currentState != prevCurrentState)
 		|| ((lastError != nullptr || currentState != lastReportedState) && millis() - lastStatusReportTime > StatusReportMillis)
 	   )
@@ -985,11 +1128,18 @@ void loop()
 
 	ConnectPoll();
 	Connection::PollOne();
-	Connection::ReportConnections();
 
 	if (currentState == WiFiState::runningAsAccessPoint)
 	{
 		dns.processNextRequest();
+	}
+	else if (	(currentState == WiFiState::autoReconnecting ||
+				 currentState == WiFiState::connecting ||
+				 currentState == WiFiState::reconnecting) &&
+				(millis() - lastBlinkTime > ONBOARD_LED_BLINK_INTERVAL))
+	{
+		lastBlinkTime = millis();
+		digitalWrite(ONBOARD_LED, !digitalRead(ONBOARD_LED));
 	}
 }
 
