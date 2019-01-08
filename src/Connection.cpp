@@ -184,7 +184,7 @@ size_t Connection::Write(const uint8_t *data, size_t length, bool doPush, bool c
 	if (result != ERR_OK)
 	{
 		// We failed to write the data. See above for possible mitigations. For now we just terminate the connection.
-		debugPrintf("wr fail len=%u err=%d\n", length, (int)result);
+		debugPrintfAlways("Write fail len=%u err=%d\n", length, (int)result);
 		Terminate(false);		// chrishamm: Not sure if this helps with LwIP v1.4.3 but it is mandatory for proper error handling with LwIP 2.0.3
 		return 0;
 	}
