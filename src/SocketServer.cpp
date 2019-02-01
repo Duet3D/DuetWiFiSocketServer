@@ -381,21 +381,42 @@ pre(currentState == WiFiState::idle)
 	ConnectToAccessPoint(*ssidData, false);
 }
 
-bool CheckValidString(const char * array s, size_t n, bool isSsid)
+bool CheckValidSSID(const char * array s)
 {
-	for (size_t i = 0; i < n; ++i)
+	size_t len = 0;
+	while (*s != 0)
 	{
-		char c = s[i];
-		if (c == 0)
-		{
-			return i != 0 || !isSsid;		// the SSID may not be empty but the password can be
-		}
-		if (c < 0x20 || c == 0x7F)
+		if (*s < 0x20 || *s == 0x7F)
 		{
 			return false;					// bad character
 		}
+		++s;
+		++len;
+		if (len == SsidLength)
+		{
+			return false;					// ESP8266 core requires strlen(ssid) <= 31
+		}
 	}
-	return false;							// no null terminator
+	return len != 0;
+}
+
+bool CheckValidPassword(const char * array s)
+{
+	size_t len = 0;
+	while (*s != 0)
+	{
+		if (*s < 0x20 || *s == 0x7F)
+		{
+			return false;					// bad character
+		}
+		++s;
+		++len;
+		if (len == PasswordLength)
+		{
+			return false;					// ESP8266 core requires strlen(password) <= 63
+		}
+	}
+	return len == 0 || len >= 8;			// password must be empty or at least 8 characters (WPA2 restriction)
 }
 
 // Check that the access point data is valid
@@ -413,7 +434,7 @@ bool ValidApData(const WirelessConfigurationData &apData)
 		return false;
 	}
 
-	return CheckValidString(apData.ssid, SsidLength, true) && CheckValidString(apData.password, PasswordLength, false);
+	return CheckValidSSID(apData.ssid) && CheckValidPassword(apData.password);
 }
 
 void StartAccessPoint()
@@ -429,19 +450,32 @@ void StartAccessPoint()
 		{
 			IPAddress apIP(apData.ip);
 			ok = WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+			if (ok)
+			{
+				debugPrintf("Starting AP %s with password \"%s\"\n", currentSsid, apData.password);
+				ok = WiFi.softAP(currentSsid, apData.password, (apData.channel == 0) ? DefaultWiFiChannel : apData.channel);
+				if (!ok)
+				{
+					debugPrintAlways("Failed to start AP\n");
+				}
+			}
+			else
+			{
+				debugPrintAlways("Failed to set AP config\n");
+			}
 		}
+		else
+		{
+			debugPrintAlways("Failed to set AP mode\n");
+		}
+
 		if (ok)
 		{
-			debugPrintf("Starting AP %s with password \"%s\"\n", currentSsid, apData.password);
-			ok = WiFi.softAP(currentSsid, apData.password, (apData.channel == 0) ? DefaultWiFiChannel : apData.channel);
-		}
-		if (ok)
-		{
-			debugPrint("AP started\n");
+			debugPrintAlways("AP started\n");
 			dns.setErrorReplyCode(DNSReplyCode::NoError);
 			if (!dns.start(53, "*", apData.ip))
 			{
-				lastError = "Failed to start DNS";
+				lastError = "Failed to start DNS\n";
 				debugPrintf("%s\n", lastError);
 			}
 			SafeStrncpy(currentSsid, apData.ssid, ARRAY_SIZE(currentSsid));
@@ -455,6 +489,7 @@ void StartAccessPoint()
 		}
 		else
 		{
+			WiFi.mode(WIFI_OFF);
 			lastError = "Failed to start access point";
 			debugPrintf("%s\n", lastError);
 			currentState = WiFiState::idle;
