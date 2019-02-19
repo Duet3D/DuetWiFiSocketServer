@@ -4,9 +4,6 @@
 		<cconfiguration id="cdt.managedbuild.config.gnu.cross.exe.release.385783058">
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.config.gnu.cross.exe.release.385783058" moduleId="org.eclipse.cdt.core.settings" name="Release">
 				<macros>
-					<stringMacro name="EspBootFile" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.4.1/bootloaders/eboot/eboot.elf"/>
-					<stringMacro name="EspToolPath" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\tools\esptool\0.4.13/esptool.exe"/>
-					<stringMacro name="GccPath" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\tools\xtensa-lx106-elf-gcc\1.20.0-26-gb404fb9-2\bin"/>
 				</macros>
 				<externalSettings/>
 				<extensions>
@@ -23,7 +20,7 @@
 					<folderInfo id="cdt.managedbuild.config.gnu.cross.exe.release.385783058." name="/" resourcePath="">
 						<toolChain id="cdt.managedbuild.toolchain.gnu.cross.exe.release.1856826829" name="Cross GCC" superClass="cdt.managedbuild.toolchain.gnu.cross.exe.release">
 							<option id="cdt.managedbuild.option.gnu.cross.prefix.641887751" name="Prefix" superClass="cdt.managedbuild.option.gnu.cross.prefix" useByScannerDiscovery="false" value="xtensa-lx106-elf-" valueType="string"/>
-							<option id="cdt.managedbuild.option.gnu.cross.path.1433907212" name="Path" superClass="cdt.managedbuild.option.gnu.cross.path" useByScannerDiscovery="false" value="${GccPath}" valueType="string"/>
+							<option id="cdt.managedbuild.option.gnu.cross.path.1433907212" name="Path" superClass="cdt.managedbuild.option.gnu.cross.path" useByScannerDiscovery="false" value="${XtensaGccPath}" valueType="string"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="cdt.managedbuild.targetPlatform.gnu.cross.319475565" isAbstract="false" osList="all" superClass="cdt.managedbuild.targetPlatform.gnu.cross"/>
 							<builder buildPath="${workspace_loc:/DuetWiFiSocketServer}/Release" id="cdt.managedbuild.builder.gnu.cross.1640258919" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="optimal" superClass="cdt.managedbuild.builder.gnu.cross"/>
 							<tool id="cdt.managedbuild.tool.gnu.cross.c.compiler.2083206230" name="Cross GCC Compiler" superClass="cdt.managedbuild.tool.gnu.cross.c.compiler">
@@ -119,9 +116,6 @@
 		<cconfiguration id="cdt.managedbuild.config.gnu.cross.exe.release.385783058.1711183282">
 			<storageModule buildSystemId="org.eclipse.cdt.managedbuilder.core.configurationDataProvider" id="cdt.managedbuild.config.gnu.cross.exe.release.385783058.1711183282" moduleId="org.eclipse.cdt.core.settings" name="Debug">
 				<macros>
-					<stringMacro name="EspBootFile" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\hardware\esp8266\2.4.1/bootloaders/eboot/eboot.elf"/>
-					<stringMacro name="EspToolPath" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\tools\esptool\0.4.13/esptool.exe"/>
-					<stringMacro name="GccPath" type="VALUE_TEXT" value="C:\Users\David\AppData\Local\Arduino15\packages\esp8266\tools\xtensa-lx106-elf-gcc\1.20.0-26-gb404fb9-2\bin"/>
 				</macros>
 				<externalSettings/>
 				<extensions>
@@ -138,7 +132,7 @@
 					<folderInfo id="cdt.managedbuild.config.gnu.cross.exe.release.385783058.1711183282." name="/" resourcePath="">
 						<toolChain id="cdt.managedbuild.toolchain.gnu.cross.exe.release.420869583" name="Cross GCC" superClass="cdt.managedbuild.toolchain.gnu.cross.exe.release">
 							<option id="cdt.managedbuild.option.gnu.cross.prefix.1639058805" name="Prefix" superClass="cdt.managedbuild.option.gnu.cross.prefix" useByScannerDiscovery="false" value="xtensa-lx106-elf-" valueType="string"/>
-							<option id="cdt.managedbuild.option.gnu.cross.path.801521222" name="Path" superClass="cdt.managedbuild.option.gnu.cross.path" useByScannerDiscovery="false" value="${GccPath}" valueType="string"/>
+							<option id="cdt.managedbuild.option.gnu.cross.path.801521222" name="Path" superClass="cdt.managedbuild.option.gnu.cross.path" useByScannerDiscovery="false" value="${XtensaGccPath}" valueType="string"/>
 							<targetPlatform archList="all" binaryParser="org.eclipse.cdt.core.ELF" id="cdt.managedbuild.targetPlatform.gnu.cross.954347316" isAbstract="false" osList="all" superClass="cdt.managedbuild.targetPlatform.gnu.cross"/>
 							<builder buildPath="${workspace_loc:/DuetWiFiSocketServer}/Release" id="cdt.managedbuild.builder.gnu.cross.207540841" keepEnvironmentInBuildfile="false" managedBuildOn="true" name="Gnu Make Builder" parallelBuildOn="true" parallelizationNumber="optimal" superClass="cdt.managedbuild.builder.gnu.cross"/>
 							<tool id="cdt.managedbuild.tool.gnu.cross.c.compiler.918668756" name="Cross GCC Compiler" superClass="cdt.managedbuild.tool.gnu.cross.c.compiler">
