@@ -353,17 +353,17 @@
                             							
                             <tool id="cdt.managedbuild.tool.gnu.cross.c.linker.88112554" name="Cross GCC Linker" superClass="cdt.managedbuild.tool.gnu.cross.c.linker"/>
                             							
-                            <tool commandLinePattern="${COMMAND} ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} -Wl,--start-group &quot;${workspace_loc:/CoreESP8266/Release/cores/esp8266/heap.o}&quot; ${INPUTS} -Wl,--end-group" id="cdt.managedbuild.tool.gnu.cross.cpp.linker.1400319925" name="Cross G++ Linker" superClass="cdt.managedbuild.tool.gnu.cross.cpp.linker">
+                            <tool commandLinePattern="${COMMAND} ${FLAGS} ${OUTPUT_FLAG} ${OUTPUT_PREFIX}${OUTPUT} -Wl,--start-group &quot;${workspace_loc}/CoreESP8266/Release/cores/esp8266/heap.o&quot; ${INPUTS} -Wl,--end-group" id="cdt.managedbuild.tool.gnu.cross.cpp.linker.1400319925" name="Cross G++ Linker" superClass="cdt.managedbuild.tool.gnu.cross.cpp.linker">
                                 								
                                 <option IS_BUILTIN_EMPTY="false" IS_VALUE_EMPTY="false" id="gnu.cpp.link.option.paths.434353686" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths">
                                     									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/LwipESP8266/Release}&quot;"/>
+                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc}/LwipESP8266/Release&quot;"/>
                                     									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/Release}&quot;"/>
+                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc}/CoreESP8266/Release&quot;"/>
                                     									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/CoreESP8266/sdk/lib}&quot;"/>
+                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc}/CoreESP8266/sdk/lib&quot;"/>
                                     									
-                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/src/ld}&quot;"/>
+                                    <listOptionValue builtIn="false" value="&quot;${workspace_loc}/${ProjName}/src/ld&quot;"/>
                                     								
                                 </option>
                                 								
