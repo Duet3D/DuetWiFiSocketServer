@@ -1,5 +1,4 @@
-The following variuables muse be set at the workspace level before
-building:
+The following variables muse be set at the workspace level before building:
 To set them, go to
  Windows -> Preferences -> C/C++ -> Build -> Build Variables
 and click "Add..."
