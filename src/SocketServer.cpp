@@ -148,6 +148,7 @@ pre(currentState == NetworkState::idle)
 	WiFi.mode(WIFI_STA);
 	wifi_station_set_hostname(webHostName);     				// must do this before calling WiFi.begin()
 	WiFi.setAutoConnect(false);
+//	WiFi.setAutoReconnect(false);								// auto reconnect NEVER works in our configuration so disable it, it just wastes time
 	WiFi.setAutoReconnect(true);
 #if NO_WIFI_SLEEP
 	wifi_set_sleep_type(NONE_SLEEP_T);
@@ -996,6 +997,21 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			deferCommand = true;							// we need to send the diagnostics after we have sent the response, so the SAM is ready to receive them
 			break;
 
+		case NetworkCommand::networkSetTxPower:
+			{
+				const uint8_t txPower = messageHeaderIn.hdr.flags;
+				if (txPower <= 82)
+				{
+					system_phy_set_max_tpw(txPower);
+					SendResponse(ResponseEmpty);
+				}
+				else
+				{
+					SendResponse(ResponseBadParameter);
+				}
+			}
+			break;
+
 		case NetworkCommand::connCreate:					// create a connection
 			// Not implemented yet
 		default:
@@ -1116,7 +1132,7 @@ void setup()
     hspi.begin();
     hspi.setBitOrder(MSBFIRST);
     hspi.setDataMode(SPI_MODE1);
-    hspi.setFrequency(spiFrequency);
+    hspi.setClockDivider(spiClockDivider);
 
     Connection::Init();
     Listener::Init();

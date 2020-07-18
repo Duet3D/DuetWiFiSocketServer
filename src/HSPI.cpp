@@ -1,9 +1,9 @@
-/* 
+/*
  SPI.cpp - SPI library for esp8266
 
  Copyright (c) 2015 Hristo Gochkov. All rights reserved.
  This file is part of the esp8266 core for Arduino environment.
- 
+
  This library is free software; you can redistribute it and/or
  modify it under the terms of the GNU Lesser General Public
  License as published by the Free Software Foundation; either
@@ -42,7 +42,7 @@ void HSPIClass::begin() {
     pinMode(MOSI, SPECIAL); ///< GPIO13
 
     SPI1C = 0;
-    setFrequency(1000000); ///< 1MHz
+    setClockDivider(80);	// 1MHz
     SPI1U = SPIUMOSI | SPIUDUPLEX | SPIUSSE /*| SPIUWRBYO | SPIURDBYO*/;    // slave SPI mode 0
     SPI1U1 = (7 << SPILMOSI) | (7 << SPILMISO);
     SPI1C1 = 0;
@@ -74,128 +74,74 @@ void HSPIClass::setDataMode(uint8_t dataMode) {
      SPI_MODE3 0x11 - CPOL: 1  CPHA: 1
      */
 
-    bool CPOL = (dataMode & 0x10); ///< CPOL (Clock Polarity)
+    bool CPOL = (dataMode & 0x02); ///< CPOL (Clock Polarity)
     bool CPHA = (dataMode & 0x01); ///< CPHA (Clock Phase)
 
-    if(CPHA) {
+    if (CPHA)
+    {
         SPI1U |= (SPIUSME | SPIUSSE);
-    } else {
+    }
+    else
+    {
         SPI1U &= ~(SPIUSME | SPIUSSE);
     }
 
-    if(CPOL) {
-        //todo How set CPOL???
+    if (CPOL)
+    {
+        SPI1P |= 1<<29;
     }
-
+    else
+    {
+        SPI1P &= ~(1<<29);
+        //todo test whether it is correct to set CPOL like this.
+    }
 }
 
 void HSPIClass::setBitOrder(uint8_t bitOrder) {
-    if(bitOrder == MSBFIRST) {
+    if (bitOrder == MSBFIRST) {
         SPI1C &= ~(SPICWBO | SPICRBO);
     } else {
         SPI1C |= (SPICWBO | SPICRBO);
     }
 }
 
-/**
- * calculate the Frequency based on the register value
- * @param reg
- * @return
- */
-static uint32_t ClkRegToFreq(spiClk_t * reg) {
-    return (ESP8266_CLOCK / ((reg->regPre + 1) * (reg->regN + 1)));
-}
+void HSPIClass::setClockDivider(uint32_t clockDiv)
+{
+	// From the datasheet:
+	// bits 0-5  spi_clkcnt_L = (divider - 1)
+	// bits 6-11 spi_clkcnt_H = floor(divider/2) - 1
+	// bits 12-17 spi_clkcnt_N = divider - 1
+	// bits 18-30 spi_clkdiv_pre = prescaler - 1
+	// bit 31 = set to run at sysclock speed
+	// We assume the divider is >1 but <64 so we need only worry about the low bits
 
-void HSPIClass::setFrequency(uint32_t freq) {
-    static uint32_t lastSetFrequency = 0;
-    static uint32_t lastSetRegister = 0;
+	spiClk_t reg = { 0 };
 
-    if(freq >= ESP8266_CLOCK) {
-        setClockDivider(0x80000000);
-        return;
-    }
+#if 0
+	// Algorithm from the ESP8266 technical reference:
+	reg.regN = clockDiv - 1;
+	reg.regH = (clockDiv + 1)/2 - 1;
+	reg.regL = clockDiv - 1;
+	//SPI1CLK = ((clockDiv - 1) << 12) | (clockDiv/2 - 1) << 6) | (clockDiv - 1);
+#else
+	// Arduino driver algorithm:
+	reg.regN = clockDiv - 1;
+	reg.regH = 0;
+	reg.regL = clockDiv/2;
+#endif
 
-    if(lastSetFrequency == freq && lastSetRegister == SPI1CLK) {
-        // do nothing (speed optimization)
-        return;
-    }
+//	SPI1CLK = reg.regValue;
 
-    const spiClk_t minFreqReg = { 0x7FFFF000 };
-    uint32_t minFreq = ClkRegToFreq((spiClk_t*) &minFreqReg);
-    if(freq < minFreq) {
-        // use minimum possible clock
-        setClockDivider(minFreqReg.regValue);
-        lastSetRegister = SPI1CLK;
-        lastSetFrequency = freq;
-        return;
-    }
-
-    uint8_t calN = 1;
-
-    spiClk_t bestReg = { 0 };
-    int32_t bestFreq = 0;
-
-    // find the best match
-    while(calN <= 0x3F) { // 0x3F max for N
-
-        spiClk_t reg = { 0 };
-        int32_t calFreq;
-        int32_t calPre;
-        int8_t calPreVari = -2;
-
-        reg.regN = calN;
-
-        while(calPreVari++ <= 1) { // test different variants for Pre (we calculate in int so we miss the decimals, testing is the easyest and fastest way)
-            calPre = (((ESP8266_CLOCK / (reg.regN + 1)) / freq) - 1) + calPreVari;
-            if(calPre > 0x1FFF) {
-                reg.regPre = 0x1FFF; // 8191
-            } else if(calPre <= 0) {
-                reg.regPre = 0;
-            } else {
-                reg.regPre = calPre;
-            }
-
-            reg.regL = ((reg.regN + 1) / 2);
-            // reg.regH = (reg.regN - reg.regL);
-
-            // test calculation
-            calFreq = ClkRegToFreq(&reg);
-            //os_printf("-----[0x%08X][%d]\t EQU: %d\t Pre: %d\t N: %d\t H: %d\t L: %d = %d\n", reg.regValue, freq, reg.regEQU, reg.regPre, reg.regN, reg.regH, reg.regL, calFreq);
-
-            if(calFreq == (int32_t) freq) {
-                // accurate match use it!
-                memcpy(&bestReg, &reg, sizeof(bestReg));
-                break;
-            } else if(calFreq < (int32_t) freq) {
-                // never go over the requested frequency
-                if(abs(freq - calFreq) < abs(freq - bestFreq)) {
-                    bestFreq = calFreq;
-                    memcpy(&bestReg, &reg, sizeof(bestReg));
-                }
-            }
-        }
-        if(calFreq == (int32_t) freq) {
-            // accurate match use it!
-            break;
-        }
-        calN++;
-    }
-
-    // os_printf("[0x%08X][%d]\t EQU: %d\t Pre: %d\t N: %d\t H: %d\t L: %d\t - Real Frequency: %d\n", bestReg.regValue, freq, bestReg.regEQU, bestReg.regPre, bestReg.regN, bestReg.regH, bestReg.regL, ClkRegToFreq(&bestReg));
-
-    setClockDivider(bestReg.regValue);
-    lastSetRegister = SPI1CLK;
-    lastSetFrequency = freq;
-
-}
-
-void HSPIClass::setClockDivider(uint32_t clockDiv) {
-    if(clockDiv == 0x80000000) {
-        GPMUX |= (1 << 9); // Set bit 9 if sysclock required
-    } else {
-        GPMUX &= ~(1 << 9);
-    }
-    SPI1CLK = clockDiv;
+	// In attempting to get the clock high for 25ns and low for 12.5ns, I've tested the following;
+	//SPI1CLK = (2 << 12) | (2 << 6) | 2;		// fails, code -10, clock high
+	//SPI1CLK = (2 << 12) | (2 << 6) | 1;		// fails, code -10, HLHLL
+	//SPI1CLK = (2 << 12) | (2 << 6) | 0;		// 1 high, 2 low
+	SPI1CLK = (2 << 12) | (1 << 6) | 2;		// 1 high, 2 low
+	//SPI1CLK = (2 << 12) | (1 << 6) | 1;		// fails, code -10, 80MHz
+	//SPI1CLK = (2 << 12) | (1 << 6) | 0;		// fails, code -10, HLHLL
+	//SPI1CLK = (2 << 12) | (0 << 6) | 2;		// fails, code -10, HLHLL repeating
+	//SPI1CLK = (2 << 12) | (0 << 6) | 1;		// 1 high, 2 low (what the Arduino driver gives us)
+	//SPI1CLK = (2 << 12) | (0 << 6) | 0;		// fails, code -10, 80MHz
 }
 
 void HSPIClass::setDataBits(uint16_t bits) {

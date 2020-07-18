@@ -64,7 +64,10 @@ enum class NetworkCommand : uint8_t
 	networkGetLastError,		// get the result of the last deferred command we sent
 
 	diagnostics,				// print LwIP stats and possibly more values over the UART line
-	networkRetrieveSsidData		// retrieve all the SSID data we have except the passwords
+	networkRetrieveSsidData,	// retrieve all the SSID data we have except the passwords
+
+	// Added at version 1.24
+	networkSetTxPower			// set transmitter power in units of 0.25db, max 82 = 20.5db
 };
 
 // Message header sent from the SAM to the ESP

@@ -5,7 +5,7 @@
 
 #define NO_WIFI_SLEEP	0
 
-#define VERSION_MAIN	"1.23"
+#define VERSION_MAIN	"1.24"
 
 #if NO_WIFI_SLEEP
 #define VERSION_SLEEP	"-nosleep"
@@ -27,7 +27,8 @@ const uint32_t maxSpiFileData = 2048;
 
 // Define the SPI clock frequency
 // The SAM occasionally transmits incorrect data at 40MHz, so we now use 26.7MHz.
-const uint32_t spiFrequency = 27000000;     // This will get rounded down to 80MHz/3
+// 2020-07-07: use 20MHz for the 5LC
+const uint32_t spiClockDivider = 4;
 
 // Pin numbers
 const int SamSSPin = 15;          // GPIO15, output to SAM, SS pin for SPI transfer
