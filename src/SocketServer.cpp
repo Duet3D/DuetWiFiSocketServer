@@ -40,6 +40,7 @@ extern "C"
 const unsigned int ONBOARD_LED = D4;				// GPIO 2
 const bool ONBOARD_LED_ON = false;					// active low
 const uint32_t ONBOARD_LED_BLINK_INTERVAL = 500;	// ms
+const uint32_t TransferReadyTimeout = 10;			// how many milliseconds we allow for the Duet to set TransferReady low after the end of a transaction, before we assume that we missed seeing it
 
 #if LWIP_VERSION_MAJOR == 2
 const char * const MdnsProtocolNames[3] = { "HTTP", "FTP", "Telnet" };
@@ -65,7 +66,9 @@ DNSServer dns;
 
 static const char* lastError = nullptr;
 static const char* prevLastError = nullptr;
+static uint32_t whenLastTransactionFinished = 0;
 static bool connectErrorChanged = false;
+static bool transferReadyChanged = false;
 
 static char lastConnectError[100];
 
@@ -713,6 +716,7 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			    SafeStrncpy(response->versionText, firmwareVersion, sizeof(response->versionText));
 			    SafeStrncpy(response->hostName, webHostName, sizeof(response->hostName));
 			    SafeStrncpy(response->ssid, currentSsid, sizeof(response->ssid));
+			    response->clockReg = SPI1CLK;
 				SendResponse(sizeof(NetworkStatusResponse));
 			}
 			break;
@@ -1012,6 +1016,11 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			}
 			break;
 
+		case NetworkCommand::networkSetClockControl:
+			messageHeaderIn.hdr.param32 = hspi.transfer32(ResponseEmpty);
+			deferCommand = true;
+			break;
+
 		case NetworkCommand::connCreate:					// create a connection
 			// Not implemented yet
 		default:
@@ -1088,11 +1097,20 @@ void ICACHE_RAM_ATTR ProcessRequest()
 			stats_display();
 			break;
 
+		case NetworkCommand::networkSetClockControl:
+			hspi.setClockDivider(messageHeaderIn.hdr.param32);
+			break;
+
 		default:
 			lastError = "bad deferred command";
 			break;
 		}
 	}
+}
+
+void TransferReadyIsr()
+{
+	transferReadyChanged = true;
 }
 
 void setup()
@@ -1129,10 +1147,7 @@ void setup()
     digitalWrite(SamSSPin, HIGH);
 
     // Set up the fast SPI channel
-    hspi.begin();
-    hspi.setBitOrder(MSBFIRST);
-    hspi.setDataMode(SPI_MODE1);
-    hspi.setClockDivider(spiClockDivider);
+    hspi.InitMaster(SPI_MODE1, defaultClockControl, true);
 
     Connection::Init();
     Listener::Init();
@@ -1148,8 +1163,10 @@ void setup()
 #endif
     lastError = nullptr;
     debugPrint("Init completed\n");
-	digitalWrite(EspReqTransferPin, HIGH);				// tell the SAM we are ready to receive a command
+	attachInterrupt(SamTfrReadyPin, TransferReadyIsr, CHANGE);
+	whenLastTransactionFinished = millis();
 	lastStatusReportTime = millis();
+	digitalWrite(EspReqTransferPin, HIGH);				// tell the SAM we are ready to receive a command
 }
 
 void loop()
@@ -1171,10 +1188,14 @@ void loop()
 		lastStatusReportTime = millis();
 	}
 
-	// See whether there is a request from the SAM
-	if (digitalRead(SamTfrReadyPin) == HIGH)
+	// See whether there is a request from the SAM.
+	// Duet WiFi 1.04 and earlier have hardware to ensure that TransferReady goes low when a transaction starts.
+	// Duet 3 Mini doesn't, so we need to see TransferReady go low and then high again. In case that happens so fast that we dn't get the interrupt, we have a timeout.
+	if (digitalRead(SamTfrReadyPin) == HIGH && (transferReadyChanged || millis() - whenLastTransactionFinished > TransferReadyTimeout))
 	{
+		transferReadyChanged = false;
 		ProcessRequest();
+		whenLastTransactionFinished = millis();
 	}
 
 	ConnectPoll();

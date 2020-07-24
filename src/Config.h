@@ -5,7 +5,7 @@
 
 #define NO_WIFI_SLEEP	0
 
-#define VERSION_MAIN	"1.24"
+#define VERSION_MAIN	"1.24beta-24b4"
 
 #if NO_WIFI_SLEEP
 #define VERSION_SLEEP	"-nosleep"
@@ -25,10 +25,17 @@ const char* const firmwareVersion = VERSION_MAIN VERSION_DEBUG VERSION_SLEEP;
 // ************ This must be kept in step with the corresponding value in RepRapFirmware *************
 const uint32_t maxSpiFileData = 2048;
 
-// Define the SPI clock frequency
+// Define the SPI clock register
+// Useful values of the register are:
+// 0x1001	40MHz 1:1
+// 0x2001	26.7MHz 1:2
+// 0x2402	26.7MHz 1:2
+// 0x2002	26.7MHz 2:1
+// 0x3043	20MHz 2:2
+
 // The SAM occasionally transmits incorrect data at 40MHz, so we now use 26.7MHz.
-// 2020-07-07: use 20MHz for the 5LC
-const uint32_t spiClockDivider = 4;
+// Due to the 15ns SCLK to MISO delay of the SAMD51, 2:1 is preferred over 1:2
+const uint32_t defaultClockControl = 0x2002;		// 80MHz/3, mark:space 2:1
 
 // Pin numbers
 const int SamSSPin = 15;          // GPIO15, output to SAM, SS pin for SPI transfer

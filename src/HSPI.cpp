@@ -20,6 +20,7 @@
  */
 
 #include "HSPI.h"
+#include <cmath>
 
 typedef union {
         uint32_t regValue;
@@ -33,28 +34,56 @@ typedef union {
 } spiClk_t;
 
 HSPIClass::HSPIClass() {
-    useHwCs = false;
 }
 
-void HSPIClass::begin() {
-    pinMode(SCK, SPECIAL);  ///< GPIO14
-    pinMode(MISO, SPECIAL); ///< GPIO12
-    pinMode(MOSI, SPECIAL); ///< GPIO13
+void HSPIClass::InitMaster(uint8_t mode, uint32_t clockReg, bool msbFirst)
+{
+	pinMode(SCK, SPECIAL);  ///< GPIO14
+	pinMode(MISO, SPECIAL); ///< GPIO12
+	pinMode(MOSI, SPECIAL); ///< GPIO13
 
-    SPI1C = 0;
-    setClockDivider(80);	// 1MHz
-    SPI1U = SPIUMOSI | SPIUDUPLEX | SPIUSSE /*| SPIUWRBYO | SPIURDBYO*/;    // slave SPI mode 0
-    SPI1U1 = (7 << SPILMOSI) | (7 << SPILMISO);
-    SPI1C1 = 0;
+	SPI1C = (msbFirst) ? 0 : SPICWBO | SPICRBO;
+
+	SPI1U = SPIUMOSI | SPIUDUPLEX;
+	SPI1U1 = (7 << SPILMOSI) | (7 << SPILMISO);
+	SPI1C1 = 0;
+	SPI1S = 0;
+
+	const bool CPOL = (mode & 0x02); ///< CPOL (Clock Polarity)
+	const bool CPHA = (mode & 0x01); ///< CPHA (Clock Phase)
+
+	/*
+	 SPI_MODE0 0x00 - CPOL: 0  CPHA: 0
+	 SPI_MODE1 0x01 - CPOL: 0  CPHA: 1
+	 SPI_MODE2 0x10 - CPOL: 1  CPHA: 0
+	 SPI_MODE3 0x11 - CPOL: 1  CPHA: 1
+	 */
+
+	if (CPHA)
+	{
+		SPI1U |= (SPIUSME | SPIUSSE);
+	}
+	else
+	{
+		SPI1U &= ~(SPIUSME | SPIUSSE);
+	}
+
+	if (CPOL)
+	{
+		SPI1P |= 1ul << 29;
+	}
+	else
+	{
+		SPI1P &= ~(1ul << 29);
+	}
+
+	setClockDivider(clockReg);
 }
 
 void HSPIClass::end() {
     pinMode(SCK, INPUT);
     pinMode(MISO, INPUT);
     pinMode(MOSI, INPUT);
-    if(useHwCs) {
-        pinMode(SS, INPUT);
-    }
 }
 
 // Begin a transaction without changing settings
@@ -65,46 +94,7 @@ void ICACHE_RAM_ATTR HSPIClass::beginTransaction() {
 void ICACHE_RAM_ATTR HSPIClass::endTransaction() {
 }
 
-void HSPIClass::setDataMode(uint8_t dataMode) {
-
-    /**
-     SPI_MODE0 0x00 - CPOL: 0  CPHA: 0
-     SPI_MODE1 0x01 - CPOL: 0  CPHA: 1
-     SPI_MODE2 0x10 - CPOL: 1  CPHA: 0
-     SPI_MODE3 0x11 - CPOL: 1  CPHA: 1
-     */
-
-    bool CPOL = (dataMode & 0x02); ///< CPOL (Clock Polarity)
-    bool CPHA = (dataMode & 0x01); ///< CPHA (Clock Phase)
-
-    if (CPHA)
-    {
-        SPI1U |= (SPIUSME | SPIUSSE);
-    }
-    else
-    {
-        SPI1U &= ~(SPIUSME | SPIUSSE);
-    }
-
-    if (CPOL)
-    {
-        SPI1P |= 1<<29;
-    }
-    else
-    {
-        SPI1P &= ~(1<<29);
-        //todo test whether it is correct to set CPOL like this.
-    }
-}
-
-void HSPIClass::setBitOrder(uint8_t bitOrder) {
-    if (bitOrder == MSBFIRST) {
-        SPI1C &= ~(SPICWBO | SPICRBO);
-    } else {
-        SPI1C |= (SPICWBO | SPICRBO);
-    }
-}
-
+// clockDiv is NOT the required division ratio, it is the value to write to the SPI1CLK register
 void HSPIClass::setClockDivider(uint32_t clockDiv)
 {
 	// From the datasheet:
@@ -115,36 +105,19 @@ void HSPIClass::setClockDivider(uint32_t clockDiv)
 	// bit 31 = set to run at sysclock speed
 	// We assume the divider is >1 but <64 so we need only worry about the low bits
 
-	spiClk_t reg = { 0 };
-
-#if 0
-	// Algorithm from the ESP8266 technical reference:
-	reg.regN = clockDiv - 1;
-	reg.regH = (clockDiv + 1)/2 - 1;
-	reg.regL = clockDiv - 1;
-	//SPI1CLK = ((clockDiv - 1) << 12) | (clockDiv/2 - 1) << 6) | (clockDiv - 1);
-#else
-	// Arduino driver algorithm:
-	reg.regN = clockDiv - 1;
-	reg.regH = 0;
-	reg.regL = clockDiv/2;
-#endif
-
-//	SPI1CLK = reg.regValue;
-
-	// In attempting to get the clock high for 25ns and low for 12.5ns, I've tested the following;
-	//SPI1CLK = (2 << 12) | (2 << 6) | 2;		// fails, code -10, clock high
-	//SPI1CLK = (2 << 12) | (2 << 6) | 1;		// fails, code -10, HLHLL
-	//SPI1CLK = (2 << 12) | (2 << 6) | 0;		// 1 high, 2 low
-	SPI1CLK = (2 << 12) | (1 << 6) | 2;		// 1 high, 2 low
-	//SPI1CLK = (2 << 12) | (1 << 6) | 1;		// fails, code -10, 80MHz
-	//SPI1CLK = (2 << 12) | (1 << 6) | 0;		// fails, code -10, HLHLL
-	//SPI1CLK = (2 << 12) | (0 << 6) | 2;		// fails, code -10, HLHLL repeating
-	//SPI1CLK = (2 << 12) | (0 << 6) | 1;		// 1 high, 2 low (what the Arduino driver gives us)
-	//SPI1CLK = (2 << 12) | (0 << 6) | 0;		// fails, code -10, 80MHz
+    if (clockDiv == 0x80000000)
+    {
+        GPMUX |= (1 << 9); // Set bit 9 if sysclock required
+    }
+    else
+    {
+        GPMUX &= ~(1 << 9);
+    }
+    SPI1CLK = clockDiv;
 }
 
-void HSPIClass::setDataBits(uint16_t bits) {
+void HSPIClass::setDataBits(uint16_t bits)
+{
     const uint32_t mask = ~((SPIMMOSI << SPILMOSI) | (SPIMMISO << SPILMISO));
     bits--;
     SPI1U1 = ((SPI1U1 & mask) | ((bits << SPILMOSI) | (bits << SPILMISO)));

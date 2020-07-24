@@ -32,11 +32,8 @@ const uint8_t SPI_MODE3 = 0x11; ///<  CPOL: 1  CPHA: 1
 class HSPIClass {
 public:
   HSPIClass();
-  void begin();
+  void InitMaster(uint8_t mode, uint32_t freq, bool msbFirst);
   void end();
-  void setHwCs(bool use);
-  void setBitOrder(uint8_t bitOrder);
-  void setDataMode(uint8_t dataMode);
   void setDataBits(uint16_t bits);
   void setClockDivider(uint32_t clockDiv);
   void beginTransaction();
@@ -45,7 +42,6 @@ public:
   void endTransaction(void);
 
 private:
-  bool useHwCs;
   void transferDwords_(const uint32_t * out, uint32_t * in, uint8_t size);
 };
 
