@@ -1108,7 +1108,7 @@ void ICACHE_RAM_ATTR ProcessRequest()
 	}
 }
 
-void TransferReadyIsr()
+void ICACHE_RAM_ATTR TransferReadyIsr()
 {
 	transferReadyChanged = true;
 }
