@@ -176,7 +176,7 @@ pre(currentState == NetworkState::idle)
 void ConnectPoll()
 {
 	// The Arduino WiFi.status() call is fairly useless here because it discards too much information, so use the SDK API call instead
-	const station_status_t status = wifi_station_get_connect_status();
+	const uint8_t status = wifi_station_get_connect_status();
 	const char *error = nullptr;
 	bool retry = false;
 
