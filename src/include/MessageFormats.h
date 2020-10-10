@@ -64,7 +64,11 @@ enum class NetworkCommand : uint8_t
 	networkGetLastError,		// get the result of the last deferred command we sent
 
 	diagnostics,				// print LwIP stats and possibly more values over the UART line
-	networkRetrieveSsidData		// retrieve all the SSID data we have except the passwords
+	networkRetrieveSsidData,	// retrieve all the SSID data we have except the passwords
+
+	// Added at version 1.24
+	networkSetTxPower,			// set transmitter power in units of 0.25db, max 82 = 20.5db
+	networkSetClockControl		// set clock control word - only provided because the ESP8266 documentation is not only crap but seriously wrong
 };
 
 // Message header sent from the SAM to the ESP
@@ -164,6 +168,7 @@ struct NetworkStatusResponse
 	char versionText[16];			// WiFi firmware version
 	char ssid[SsidLength];			// SSID of the router we are connected to, or our own SSDI
 	char hostName[64];				// name of the access point we are connected to, or our own access point name
+	uint32_t clockReg;				//TEMP debug
 };
 //		4 bytes of IP address
 //		4 bytes of free heap

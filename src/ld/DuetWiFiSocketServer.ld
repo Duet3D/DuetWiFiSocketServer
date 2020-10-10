@@ -1,6 +1,6 @@
-/* Flash Split for 4M chips */
+/* Flash Split for 2M chips */
 /* sketch 1019KB */
-/* spiffs 3052KB */
+/* spiffs 1004KB */
 /* eeprom 20KB */
 
 MEMORY
@@ -12,9 +12,11 @@ MEMORY
 }
 
 PROVIDE ( _SPIFFS_start = 0x40300000 );
-PROVIDE ( _SPIFFS_end = 0x405FB000 );
+/* PROVIDE ( _SPIFFS_end = 0x405FB000 );
 PROVIDE ( _SPIFFS_page = 0x100 );
-PROVIDE ( _SPIFFS_block = 0x2000 );
+PROVIDE ( _SPIFFS_block = 0x2000 ); */
+
+PROVIDE ( _SPIFFS_end = 0x403FB000 );	/* for 2Mbyte chip */
 
 PHDRS
 {
