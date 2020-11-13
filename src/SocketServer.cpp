@@ -710,7 +710,9 @@ void ICACHE_RAM_ATTR ProcessRequest()
 				response->rssi = (runningAsStation) ? wifi_station_get_rssi() : 0;
 				response->numClients = (runningAsAp) ? wifi_softap_get_station_num() : 0;
 				response->sleepMode = (uint8_t)wifi_get_sleep_type() + 1;
-				response->spare = 0;
+				response->phyMode = (uint8_t)wifi_get_phy_mode();
+				response->zero1 = 0;
+				response->zero2 = 0;
 				response->vcc = system_get_vdd33();
 			    wifi_get_macaddr((runningAsAp) ? SOFTAP_IF : STATION_IF, response->macAddress);
 			    SafeStrncpy(response->versionText, firmwareVersion, sizeof(response->versionText));
