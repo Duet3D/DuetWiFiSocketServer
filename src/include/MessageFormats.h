@@ -35,8 +35,6 @@ static inline constexpr size_t NumDwords(size_t arg)
 	return (arg + sizeof(uint32_t) - 1)/sizeof(uint32_t);
 }
 
-#define SIZE_IN_DWORDS(_x) NumDwords(sizeof(_x))
-
 // Commands from the SAM to the ESP
 enum class NetworkCommand : uint8_t
 {
@@ -87,7 +85,7 @@ struct MessageHeaderSamToEsp
 	static const uint8_t FlagPush = 0x02;
 };
 
-const size_t headerDwords = SIZE_IN_DWORDS(MessageHeaderSamToEsp);
+const size_t headerDwords = NumDwords(sizeof(MessageHeaderSamToEsp));
 
 // Message data sent from SAM to ESP for a connCreate, networkListen or networkStopListening command
 // For a networkStopListening command, only the port number is used
