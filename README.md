@@ -1,4 +1,5 @@
-The following variables muse be set at the workspace level before building:
+The following variuables muse be set at the workspace level before
+building:
 To set them, go to
  Windows -> Preferences -> C/C++ -> Build -> Build Variables
 and click "Add..."
@@ -9,3 +10,5 @@ and click "Add..."
 	`<sourcedir>/esp8266/hardware/esp8266/2.4.1/bootloaders/eboot/eboot.elf`  
 **EspToolPath**: The path to esptool.  For example...  
 	`<sourcedir>/esp8266/tools/esptool/0.4.13/esptool.exe`
+
+For EspTool it is the one here, https://github.com/igrr/esptool-ck/releases user version 4.12 or higher

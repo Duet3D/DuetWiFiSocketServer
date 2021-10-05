@@ -3,6 +3,7 @@
 	<name>DuetWiFiSocketServer</name>
 	<comment></comment>
 	<projects>
+		<project>CoreESP8266</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

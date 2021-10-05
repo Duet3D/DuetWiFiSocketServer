@@ -35,8 +35,6 @@ static inline constexpr size_t NumDwords(size_t arg)
 	return (arg + sizeof(uint32_t) - 1)/sizeof(uint32_t);
 }
 
-#define SIZE_IN_DWORDS(_x) NumDwords(sizeof(_x))
-
 // Commands from the SAM to the ESP
 enum class NetworkCommand : uint8_t
 {
@@ -64,7 +62,11 @@ enum class NetworkCommand : uint8_t
 	networkGetLastError,		// get the result of the last deferred command we sent
 
 	diagnostics,				// print LwIP stats and possibly more values over the UART line
-	networkRetrieveSsidData		// retrieve all the SSID data we have except the passwords
+	networkRetrieveSsidData,	// retrieve all the SSID data we have except the passwords
+
+	// Added at version 1.24
+	networkSetTxPower,			// set transmitter power in units of 0.25db, max 82 = 20.5db
+	networkSetClockControl		// set clock control word - only provided because the ESP8266 documentation is not only crap but seriously wrong
 };
 
 // Message header sent from the SAM to the ESP
@@ -83,7 +85,7 @@ struct MessageHeaderSamToEsp
 	static const uint8_t FlagPush = 0x02;
 };
 
-const size_t headerDwords = SIZE_IN_DWORDS(MessageHeaderSamToEsp);
+const size_t headerDwords = NumDwords(sizeof(MessageHeaderSamToEsp));
 
 // Message data sent from SAM to ESP for a connCreate, networkListen or networkStopListening command
 // For a networkStopListening command, only the port number is used
@@ -157,13 +159,16 @@ struct NetworkStatusResponse
 	uint32_t flashSize;				// flash size in bytes
 	int8_t rssi;					// received signal strength (if operating as a wifi client)
 	uint8_t numClients;				// the number of connected clients (if operating as an AP)
-	uint8_t sleepMode;				// the wifi sleep mode
-	uint8_t spare;					// unused, set to 0 for future compatibility
+	uint8_t sleepMode : 2,			// the wifi sleep mode, 0 = unknown, 1 = none, 2 = light, 3 = modem
+			phyMode: 2,				// the connection mode to the AP, 1 = B, 2 = G, 3 = N
+			zero1 : 4;				// unused, set to zero
+	uint8_t zero2;					// unused, set to zero
 	uint16_t vcc;					// ESP Vcc voltage according to its ADC
     uint8_t macAddress[6];			// MAC address
 	char versionText[16];			// WiFi firmware version
 	char ssid[SsidLength];			// SSID of the router we are connected to, or our own SSDI
 	char hostName[64];				// name of the access point we are connected to, or our own access point name
+	uint32_t clockReg;				// the SPI clock register
 };
 //		4 bytes of IP address
 //		4 bytes of free heap

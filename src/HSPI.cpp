@@ -1,9 +1,9 @@
-/* 
+/*
  SPI.cpp - SPI library for esp8266
 
  Copyright (c) 2015 Hristo Gochkov. All rights reserved.
  This file is part of the esp8266 core for Arduino environment.
- 
+
  This library is free software; you can redistribute it and/or
  modify it under the terms of the GNU Lesser General Public
  License as published by the Free Software Foundation; either
@@ -20,6 +20,7 @@
  */
 
 #include "HSPI.h"
+#include <cmath>
 
 typedef union {
         uint32_t regValue;
@@ -33,28 +34,56 @@ typedef union {
 } spiClk_t;
 
 HSPIClass::HSPIClass() {
-    useHwCs = false;
 }
 
-void HSPIClass::begin() {
-    pinMode(SCK, SPECIAL);  ///< GPIO14
-    pinMode(MISO, SPECIAL); ///< GPIO12
-    pinMode(MOSI, SPECIAL); ///< GPIO13
+void HSPIClass::InitMaster(uint8_t mode, uint32_t clockReg, bool msbFirst)
+{
+	pinMode(SCK, SPECIAL);  ///< GPIO14
+	pinMode(MISO, SPECIAL); ///< GPIO12
+	pinMode(MOSI, SPECIAL); ///< GPIO13
 
-    SPI1C = 0;
-    setFrequency(1000000); ///< 1MHz
-    SPI1U = SPIUMOSI | SPIUDUPLEX | SPIUSSE /*| SPIUWRBYO | SPIURDBYO*/;    // slave SPI mode 0
-    SPI1U1 = (7 << SPILMOSI) | (7 << SPILMISO);
-    SPI1C1 = 0;
+	SPI1C = (msbFirst) ? 0 : SPICWBO | SPICRBO;
+
+	SPI1U = SPIUMOSI | SPIUDUPLEX;
+	SPI1U1 = (7 << SPILMOSI) | (7 << SPILMISO);
+	SPI1C1 = 0;
+	SPI1S = 0;
+
+	const bool CPOL = (mode & 0x02); ///< CPOL (Clock Polarity)
+	const bool CPHA = (mode & 0x01); ///< CPHA (Clock Phase)
+
+	/*
+	 SPI_MODE0 0x00 - CPOL: 0  CPHA: 0
+	 SPI_MODE1 0x01 - CPOL: 0  CPHA: 1
+	 SPI_MODE2 0x10 - CPOL: 1  CPHA: 0
+	 SPI_MODE3 0x11 - CPOL: 1  CPHA: 1
+	 */
+
+	if (CPHA)
+	{
+		SPI1U |= (SPIUSME | SPIUSSE);
+	}
+	else
+	{
+		SPI1U &= ~(SPIUSME | SPIUSSE);
+	}
+
+	if (CPOL)
+	{
+		SPI1P |= 1ul << 29;
+	}
+	else
+	{
+		SPI1P &= ~(1ul << 29);
+	}
+
+	setClockDivider(clockReg);
 }
 
 void HSPIClass::end() {
     pinMode(SCK, INPUT);
     pinMode(MISO, INPUT);
     pinMode(MOSI, INPUT);
-    if(useHwCs) {
-        pinMode(SS, INPUT);
-    }
 }
 
 // Begin a transaction without changing settings
@@ -65,140 +94,30 @@ void ICACHE_RAM_ATTR HSPIClass::beginTransaction() {
 void ICACHE_RAM_ATTR HSPIClass::endTransaction() {
 }
 
-void HSPIClass::setDataMode(uint8_t dataMode) {
+// clockDiv is NOT the required division ratio, it is the value to write to the SPI1CLK register
+void HSPIClass::setClockDivider(uint32_t clockDiv)
+{
+	// From the datasheet:
+	// bits 0-5  spi_clkcnt_L = (divider - 1)
+	// bits 6-11 spi_clkcnt_H = floor(divider/2) - 1
+	// bits 12-17 spi_clkcnt_N = divider - 1
+	// bits 18-30 spi_clkdiv_pre = prescaler - 1
+	// bit 31 = set to run at sysclock speed
+	// We assume the divider is >1 but <64 so we need only worry about the low bits
 
-    /**
-     SPI_MODE0 0x00 - CPOL: 0  CPHA: 0
-     SPI_MODE1 0x01 - CPOL: 0  CPHA: 1
-     SPI_MODE2 0x10 - CPOL: 1  CPHA: 0
-     SPI_MODE3 0x11 - CPOL: 1  CPHA: 1
-     */
-
-    bool CPOL = (dataMode & 0x10); ///< CPOL (Clock Polarity)
-    bool CPHA = (dataMode & 0x01); ///< CPHA (Clock Phase)
-
-    if(CPHA) {
-        SPI1U |= (SPIUSME | SPIUSSE);
-    } else {
-        SPI1U &= ~(SPIUSME | SPIUSSE);
-    }
-
-    if(CPOL) {
-        //todo How set CPOL???
-    }
-
-}
-
-void HSPIClass::setBitOrder(uint8_t bitOrder) {
-    if(bitOrder == MSBFIRST) {
-        SPI1C &= ~(SPICWBO | SPICRBO);
-    } else {
-        SPI1C |= (SPICWBO | SPICRBO);
-    }
-}
-
-/**
- * calculate the Frequency based on the register value
- * @param reg
- * @return
- */
-static uint32_t ClkRegToFreq(spiClk_t * reg) {
-    return (ESP8266_CLOCK / ((reg->regPre + 1) * (reg->regN + 1)));
-}
-
-void HSPIClass::setFrequency(uint32_t freq) {
-    static uint32_t lastSetFrequency = 0;
-    static uint32_t lastSetRegister = 0;
-
-    if(freq >= ESP8266_CLOCK) {
-        setClockDivider(0x80000000);
-        return;
-    }
-
-    if(lastSetFrequency == freq && lastSetRegister == SPI1CLK) {
-        // do nothing (speed optimization)
-        return;
-    }
-
-    const spiClk_t minFreqReg = { 0x7FFFF000 };
-    uint32_t minFreq = ClkRegToFreq((spiClk_t*) &minFreqReg);
-    if(freq < minFreq) {
-        // use minimum possible clock
-        setClockDivider(minFreqReg.regValue);
-        lastSetRegister = SPI1CLK;
-        lastSetFrequency = freq;
-        return;
-    }
-
-    uint8_t calN = 1;
-
-    spiClk_t bestReg = { 0 };
-    int32_t bestFreq = 0;
-
-    // find the best match
-    while(calN <= 0x3F) { // 0x3F max for N
-
-        spiClk_t reg = { 0 };
-        int32_t calFreq;
-        int32_t calPre;
-        int8_t calPreVari = -2;
-
-        reg.regN = calN;
-
-        while(calPreVari++ <= 1) { // test different variants for Pre (we calculate in int so we miss the decimals, testing is the easyest and fastest way)
-            calPre = (((ESP8266_CLOCK / (reg.regN + 1)) / freq) - 1) + calPreVari;
-            if(calPre > 0x1FFF) {
-                reg.regPre = 0x1FFF; // 8191
-            } else if(calPre <= 0) {
-                reg.regPre = 0;
-            } else {
-                reg.regPre = calPre;
-            }
-
-            reg.regL = ((reg.regN + 1) / 2);
-            // reg.regH = (reg.regN - reg.regL);
-
-            // test calculation
-            calFreq = ClkRegToFreq(&reg);
-            //os_printf("-----[0x%08X][%d]\t EQU: %d\t Pre: %d\t N: %d\t H: %d\t L: %d = %d\n", reg.regValue, freq, reg.regEQU, reg.regPre, reg.regN, reg.regH, reg.regL, calFreq);
-
-            if(calFreq == (int32_t) freq) {
-                // accurate match use it!
-                memcpy(&bestReg, &reg, sizeof(bestReg));
-                break;
-            } else if(calFreq < (int32_t) freq) {
-                // never go over the requested frequency
-                if(abs(freq - calFreq) < abs(freq - bestFreq)) {
-                    bestFreq = calFreq;
-                    memcpy(&bestReg, &reg, sizeof(bestReg));
-                }
-            }
-        }
-        if(calFreq == (int32_t) freq) {
-            // accurate match use it!
-            break;
-        }
-        calN++;
-    }
-
-    // os_printf("[0x%08X][%d]\t EQU: %d\t Pre: %d\t N: %d\t H: %d\t L: %d\t - Real Frequency: %d\n", bestReg.regValue, freq, bestReg.regEQU, bestReg.regPre, bestReg.regN, bestReg.regH, bestReg.regL, ClkRegToFreq(&bestReg));
-
-    setClockDivider(bestReg.regValue);
-    lastSetRegister = SPI1CLK;
-    lastSetFrequency = freq;
-
-}
-
-void HSPIClass::setClockDivider(uint32_t clockDiv) {
-    if(clockDiv == 0x80000000) {
+    if (clockDiv == 0x80000000)
+    {
         GPMUX |= (1 << 9); // Set bit 9 if sysclock required
-    } else {
+    }
+    else
+    {
         GPMUX &= ~(1 << 9);
     }
     SPI1CLK = clockDiv;
 }
 
-void HSPIClass::setDataBits(uint16_t bits) {
+void HSPIClass::setDataBits(uint16_t bits)
+{
     const uint32_t mask = ~((SPIMMOSI << SPILMOSI) | (SPIMMISO << SPILMISO));
     bits--;
     SPI1U1 = ((SPI1U1 & mask) | ((bits << SPILMOSI) | (bits << SPILMISO)));
