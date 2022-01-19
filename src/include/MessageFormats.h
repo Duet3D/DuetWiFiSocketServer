@@ -165,20 +165,11 @@ struct NetworkStatusResponse
 	uint8_t zero2;					// unused, set to zero
 	uint16_t vcc;					// ESP Vcc voltage according to its ADC
     uint8_t macAddress[6];			// MAC address
-	char versionText[16];			// WiFi firmware version
-	char ssid[SsidLength];			// SSID of the router we are connected to, or our own SSDI
-	char hostName[64];				// name of the access point we are connected to, or our own access point name
+	char versionText[16];			// WiFi firmware version, null terminated
+	char ssid[SsidLength];			// SSID of the router we are connected to, or our own SSID, null terminated
+	char hostName[64];				// name of the access point we are connected to, or our own access point name, null terminated
 	uint32_t clockReg;				// the SPI clock register
 };
-//		4 bytes of IP address
-//		4 bytes of free heap
-//		4 bytes of reset reason
-//		4 bytes of flash chip size
-//		4 bytes of RSSI (added for info version 2)
-//		2 bytes of ESP8266 Vcc according to its ADC
-//		16 chars of WiFi firmware version
-//		32 chars of ssid (either ssid we are connected to or our own AP name), null terminated
-//		64 chars of host name, null terminated
 
 /* The reset reasons are coded as follows (see resetReasonTexts in file WiFiInterface.cpp in the RepRapFirmware project):
  * 0 "Power up"
