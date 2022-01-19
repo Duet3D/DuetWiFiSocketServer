@@ -180,6 +180,20 @@ struct NetworkStatusResponse
 //		32 chars of ssid (either ssid we are connected to or our own AP name), null terminated
 //		64 chars of host name, null terminated
 
+/* The reset reasons are coded as follows (see resetReasonTexts in file WiFiInterface.cpp in the RepRapFirmware project):
+ * 0 "Power up"
+ * 1 "Hardware watchdog"
+ * 2 "Exception"
+ * 3 "Software watchdog"
+ * 4 "Software restart"
+ * 5 "Deep-sleep wakeup"
+ * 6 "Turned on by main processor" (i.e. RESET signal de-asserted)
+ * 7 "Brownout" (used by the ESP RTOS SDK and ESP-IDF only, not by the older SDKs)
+ * 8 "SDIO reset" (ESP_RST_SDIO from SDK)
+ * Any higher value will be translated to "unknown". So ESP_RST_UNKNOWN returned by later SDKs can be translated to code e.g. 20.
+*/
+
+
 // State of a connection
 // The table of state names in Connection.cpp must be kept in step with this
 enum class ConnState : uint8_t
