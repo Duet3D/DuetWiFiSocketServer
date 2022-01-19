@@ -181,7 +181,8 @@ struct NetworkStatusResponse
  * 6 "Turned on by main processor" (i.e. RESET signal de-asserted)
  * 7 "Brownout" (used by the ESP RTOS SDK and ESP-IDF only, not by the older SDKs)
  * 8 "SDIO reset" (ESP_RST_SDIO from SDK)
- * Any higher value will be translated to "unknown". So ESP_RST_UNKNOWN returned by later SDKs can be translated to code e.g. 20.
+ * 9 "Unknown" (ESP_RST_UNKNOWN from EDK)
+ * Any higher value will be translated to "unrecognised"
 */
 
 
