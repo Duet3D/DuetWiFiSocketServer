@@ -2,9 +2,9 @@
 
 This is a brief description howto setup the build environment for DuetWifiSocketServer
 
-# Setup
+## Setup
 
-## Workspace
+### Workspace
 
 - create a folder for the eclipse workspace
 - checkout the following repositories into workspace
@@ -12,7 +12,7 @@ This is a brief description howto setup the build environment for DuetWifiSocket
   - git clone git@github.com:Duet3D/LwipESP8266.git
   - git clone git@github.com:Duet3D/CoreESP8266.git
 
-## Configuration
+### Configuration
 
 - launch Eclipse
 - open created workspace
@@ -24,27 +24,32 @@ This is a brief description howto setup the build environment for DuetWifiSocket
   - add EspBootFile, i.e. /path/to/eboot.elf or C:\path\to\esptool.elf
 - set all projects to Release build configuration
 
-## Build
+### Build
 
 - run build
 
-# Downloads
+## Downloads
 
-## Xtensa Toolchain
+### Xtensa Toolchain
 
 - https://github.com/espressif/ESP8266_RTOS_SDK#get-toolchain
 
-## Esptool
+### Esptool
 
 - https://github.com/igrr/esptool-ck/
 
-## Sources
+### Sources
 
 - https://github.com/Duet3D/DuetWifiSocketServer
 - https://github.com/Duet3D/LwipESP8266
 - https://github.com/Duet3D/CoreESP8266
 
-## Links
+### Links
 
 - forum - https://forum.duet3d.com/
 - wiki - https://duet3d.dozuki.com/
+
+
+## Bug reports
+
+Please use the [forum](https://forum.duet3d.com) for support requests or the [RepRapFirmware](https://github.com/Duet3D/RepRapFirmware/issues) GitHub repository for feature requests and bug reports.
