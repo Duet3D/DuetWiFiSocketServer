@@ -66,7 +66,13 @@ enum class NetworkCommand : uint8_t
 
 	// Added at version 1.24
 	networkSetTxPower,			// set transmitter power in units of 0.25db, max 82 = 20.5db
-	networkSetClockControl		// set clock control word - only provided because the ESP8266 documentation is not only crap but seriously wrong
+	networkSetClockControl,		// set clock control word - only provided because the ESP8266 documentation is not only crap but seriously wrong
+
+#if 1
+	// Extra definitions for compatibility with RTOS version of WiFiSocketServer
+	networkStartScan,			// start a scan for APs the module can connect to
+	networkGetScanResult		// get the results of the previously started scan
+#endif
 };
 
 // Message header sent from the SAM to the ESP
@@ -86,6 +92,40 @@ struct MessageHeaderSamToEsp
 };
 
 const size_t headerDwords = NumDwords(sizeof(MessageHeaderSamToEsp));
+
+#if 1
+
+// Extra definitions for compatibility with RTOS version of WiFiSocketServer
+enum class EspWiFiPhyMode
+{
+	B = 1,
+	G = 2,
+	N = 3,
+};
+
+enum class WiFiAuth
+{
+	OPEN = 0,
+	WEP,
+	WPA_PSK,
+	WPA2_PSK,
+	WPA_WPA2_PSK,
+	WPA2_ENTERPRISE,
+	WPA3_PSK,
+	WPA2_WPA3_PSK,
+	WAPI_PSK,
+	UNKNOWN
+};
+
+struct WiFiScanData
+{
+	int8_t rssi;	/* signal strength from -100 to 0 in dB */
+	EspWiFiPhyMode phymode;
+	WiFiAuth auth;
+	char ssid[SsidLength + 1];
+};
+
+#endif
 
 // Message data sent from SAM to ESP for a connCreate, networkListen or networkStopListening command
 // For a networkStopListening command, only the port number is used
@@ -230,6 +270,12 @@ const int32_t ResponseBufferTooSmall = -9;
 const int32_t ResponseBadReplyFormatVersion = -10;
 const int32_t ResponseBadParameter = -11;
 const int32_t ResponseUnknownError = -12;
+
+#if 1
+// Extra definitions for compatibility with RTOS version of WiFiSocketServer
+const int32_t ResponseNoScanStarted = -13;
+const int32_t ResponseScanInProgress = -14;
+#endif
 
 const size_t MaxRememberedNetworks = 20;
 static_assert((MaxRememberedNetworks + 1) * ReducedWirelessConfigurationDataSize <= MaxDataLength, "Too many remembered networks");
