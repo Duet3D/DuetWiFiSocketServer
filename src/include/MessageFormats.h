@@ -66,7 +66,13 @@ enum class NetworkCommand : uint8_t
 
 	// Added at version 1.24
 	networkSetTxPower,			// set transmitter power in units of 0.25db, max 82 = 20.5db
-	networkSetClockControl		// set clock control word - only provided because the ESP8266 documentation is not only crap but seriously wrong
+	networkSetClockControl,		// set clock control word - only provided because the ESP8266 documentation is not only crap but seriously wrong
+
+#if 1
+	// Extra definitions for compatibility with RTOS version of WiFiSocketServer
+	networkStartScan,			// start a scan for APs the module can connect to
+	networkGetScanResult		// get the results of the previously started scan
+#endif
 };
 
 // Message header sent from the SAM to the ESP
@@ -86,6 +92,40 @@ struct MessageHeaderSamToEsp
 };
 
 const size_t headerDwords = NumDwords(sizeof(MessageHeaderSamToEsp));
+
+#if 1
+
+// Extra definitions for compatibility with RTOS version of WiFiSocketServer
+enum class EspWiFiPhyMode
+{
+	B = 1,
+	G = 2,
+	N = 3,
+};
+
+enum class WiFiAuth
+{
+	OPEN = 0,
+	WEP,
+	WPA_PSK,
+	WPA2_PSK,
+	WPA_WPA2_PSK,
+	WPA2_ENTERPRISE,
+	WPA3_PSK,
+	WPA2_WPA3_PSK,
+	WAPI_PSK,
+	UNKNOWN
+};
+
+struct WiFiScanData
+{
+	int8_t rssi;	/* signal strength from -100 to 0 in dB */
+	EspWiFiPhyMode phymode;
+	WiFiAuth auth;
+	char ssid[SsidLength + 1];
+};
+
+#endif
 
 // Message data sent from SAM to ESP for a connCreate, networkListen or networkStopListening command
 // For a networkStopListening command, only the port number is used
@@ -165,20 +205,26 @@ struct NetworkStatusResponse
 	uint8_t zero2;					// unused, set to zero
 	uint16_t vcc;					// ESP Vcc voltage according to its ADC
     uint8_t macAddress[6];			// MAC address
-	char versionText[16];			// WiFi firmware version
-	char ssid[SsidLength];			// SSID of the router we are connected to, or our own SSDI
-	char hostName[64];				// name of the access point we are connected to, or our own access point name
+	char versionText[16];			// WiFi firmware version, null terminated
+	char ssid[SsidLength];			// SSID of the router we are connected to, or our own SSID, null terminated
+	char hostName[64];				// name of the access point we are connected to, or our own access point name, null terminated
 	uint32_t clockReg;				// the SPI clock register
 };
-//		4 bytes of IP address
-//		4 bytes of free heap
-//		4 bytes of reset reason
-//		4 bytes of flash chip size
-//		4 bytes of RSSI (added for info version 2)
-//		2 bytes of ESP8266 Vcc according to its ADC
-//		16 chars of WiFi firmware version
-//		32 chars of ssid (either ssid we are connected to or our own AP name), null terminated
-//		64 chars of host name, null terminated
+
+/* The reset reasons are coded as follows (see resetReasonTexts in file WiFiInterface.cpp in the RepRapFirmware project):
+ * 0 "Power up"
+ * 1 "Hardware watchdog"
+ * 2 "Exception"
+ * 3 "Software watchdog"
+ * 4 "Software restart"
+ * 5 "Deep-sleep wakeup"
+ * 6 "Turned on by main processor" (i.e. RESET signal de-asserted)
+ * 7 "Brownout" (used by the ESP RTOS SDK and ESP-IDF only, not by the older SDKs)
+ * 8 "SDIO reset" (ESP_RST_SDIO from SDK)
+ * 9 "Unknown" (ESP_RST_UNKNOWN from EDK)
+ * Any higher value will be translated to "unrecognised"
+*/
+
 
 // State of a connection
 // The table of state names in Connection.cpp must be kept in step with this
@@ -224,6 +270,12 @@ const int32_t ResponseBufferTooSmall = -9;
 const int32_t ResponseBadReplyFormatVersion = -10;
 const int32_t ResponseBadParameter = -11;
 const int32_t ResponseUnknownError = -12;
+
+#if 1
+// Extra definitions for compatibility with RTOS version of WiFiSocketServer
+const int32_t ResponseNoScanStarted = -13;
+const int32_t ResponseScanInProgress = -14;
+#endif
 
 const size_t MaxRememberedNetworks = 20;
 static_assert((MaxRememberedNetworks + 1) * ReducedWirelessConfigurationDataSize <= MaxDataLength, "Too many remembered networks");
