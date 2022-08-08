@@ -5,7 +5,7 @@
 
 #define NO_WIFI_SLEEP	0
 
-#define VERSION_MAIN	"1.26"
+#define VERSION_MAIN	"1.27beta1"
 
 #if NO_WIFI_SLEEP
 #define VERSION_SLEEP	"-nosleep"
@@ -33,7 +33,7 @@ const uint32_t maxSpiFileData = 2048;
 // 0x2002	26.7MHz 2:1
 // 0x3043	20MHz 2:2
 
-// The SAM occasionally transmits incorrect data at 40MHz, so we now use 26.7MHz.
+// The SAM4E occasionally transmits incorrect data at 40MHz, so we now use 26.7MHz.
 // Due to the 15ns SCLK to MISO delay of the SAMD51, 2:1 is preferred over 1:2
 const uint32_t defaultClockControl = 0x2002;		// 80MHz/3, mark:space 2:1
 

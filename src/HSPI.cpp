@@ -141,49 +141,121 @@ uint32_t ICACHE_RAM_ATTR HSPIClass::transfer32(uint32_t data)
  * @param size uint32_t
  */
 void ICACHE_RAM_ATTR HSPIClass::transferDwords(const uint32_t * out, uint32_t * in, uint32_t size) {
-    while(size != 0) {
-        if (size > 16) {
-            transferDwords_(out, in, 16);
-            size -= 16;
-            if(out) out += 16;
-            if(in) in += 16;
-        } else {
-            transferDwords_(out, in, size);
-            size = 0;
+    while (size >= 16)
+    {
+        while (SPI1CMD & SPIBUSY) {}
+
+        // Set in/out Bits to transfer
+        setDataBits(16 * 32);
+
+        volatile uint32_t * fifoPtr = &SPI1W0;
+		if (out != nullptr)
+		{
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+			*fifoPtr++ = *out++;
+         }
+         else
+         {
+            // No out data, so fill with dummy data
+        	 const uint32_t fillData = 0xFFFFFFFF;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
+			*fifoPtr++ = fillData;
         }
+
+        SPI1CMD |= SPIBUSY;
+        while (SPI1CMD & SPIBUSY) {}
+
+        if (in != nullptr)
+        {
+            volatile uint32_t * fifoPtrRd = &SPI1W0;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+			*in++ = *fifoPtrRd++;
+        }
+
+		size -= 16;
     }
-}
 
-void ICACHE_RAM_ATTR HSPIClass::transferDwords_(const uint32_t * out, uint32_t * in, uint8_t size) {
-    while(SPI1CMD & SPIBUSY) {}
+    if (size != 0)
+    {
+        while(SPI1CMD & SPIBUSY) {}
 
-    // Set in/out Bits to transfer
-    setDataBits(size * 32);
+        // Set in/out Bits to transfer
+        setDataBits(size * 32);
 
-    volatile uint32_t * fifoPtr = &SPI1W0;
-    uint8_t dataSize = size;
+        volatile uint32_t * fifoPtr = &SPI1W0;
+        uint32_t dataSize = size;
 
-    if (out != nullptr) {
-        while(dataSize != 0) {
-            *fifoPtr++ = *out++;
-            dataSize--;
+        if (out != nullptr)
+        {
+            do
+            {
+                *fifoPtr++ = *out++;
+                dataSize--;
+            } while (dataSize != 0);
         }
-    } else {
-        // no out data, so fill with dummy data
-        while(dataSize != 0) {
-            *fifoPtr++ = 0xFFFFFFFF;
-            dataSize--;
+        else
+        {
+            // No out data, so fill with dummy data
+            do
+            {
+                *fifoPtr++ = 0xFFFFFFFF;
+                dataSize--;
+            } while(dataSize != 0);
         }
-    }
 
-    SPI1CMD |= SPIBUSY;
-    while(SPI1CMD & SPIBUSY) {}
+        SPI1CMD |= SPIBUSY;
+        while(SPI1CMD & SPIBUSY) {}
 
-    if (in != nullptr) {
-        volatile uint32_t * fifoPtrRd = &SPI1W0;
-        while(size != 0) {
-            *in++ = *fifoPtrRd++;
-            size--;
+        if (in != nullptr)
+        {
+            volatile uint32_t * fifoPtrRd = &SPI1W0;
+            do
+            {
+                *in++ = *fifoPtrRd++;
+                size--;
+            } while (size != 0);
         }
     }
 }
