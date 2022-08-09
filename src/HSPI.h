@@ -40,9 +40,6 @@ public:
   uint32_t transfer32(uint32_t data);
   void transferDwords(const uint32_t * out, uint32_t * in, uint32_t size);
   void endTransaction(void);
-
-private:
-  void transferDwords_(const uint32_t * out, uint32_t * in, uint8_t size);
 };
 
 #endif

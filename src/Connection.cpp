@@ -49,7 +49,7 @@ extern "C"
 // Public interface
 Connection::Connection(uint8_t num)
 	: number(num), state(ConnState::free), localPort(0), remotePort(0), remoteIp(0), writeTimer(0), closeTimer(0),
-	  unAcked(0), readIndex(0), alreadyRead(0), ownPcb(nullptr), pb(nullptr)
+	  unAcked(0), readIndex(0), ownPcb(nullptr), pb(nullptr)
 {
 }
 
@@ -215,17 +215,42 @@ size_t Connection::CanWrite() const
 	return (state == ConnState::connected) ? tcp_sndbuf(ownPcb) : 0;
 }
 
-size_t Connection::Read(uint8_t *data, size_t length)
+size_t ICACHE_RAM_ATTR Connection::Read(uint8_t *data, size_t length)
 {
 	size_t lengthRead = 0;
 	if (pb != nullptr && length != 0 && (state == ConnState::connected || state == ConnState::otherEndClosed))
 	{
 		do
 		{
+#if 0		// this code is actually a little slower than a straight memcpy, so don't use it
+			// Try to optimise data copying, by copying 4 dwords at a time if everything is aligned
+			size_t toRead = std::min<size_t>(pb->len - readIndex, length);
+			uint8_t *dst8 = data + lengthRead;
+			const uint8_t *src8 = (uint8_t *)pb->payload + readIndex;
+			lengthRead += toRead;
+			readIndex += toRead;
+			if (((uint32_t)src8 & 3) == 0 && ((uint32_t)dst8 & 3) == 0)
+			{
+				uint32_t *dst32 = (uint32_t*)dst8;
+				const uint32_t *src32 = (const uint32_t*)src8;
+				while (toRead >= 16)
+				{
+					*dst32++ = *src32++;
+					*dst32++ = *src32++;
+					*dst32++ = *src32++;
+					*dst32++ = *src32++;
+					toRead -= 16;
+				}
+				dst8 = (uint8_t*)dst32;
+				src8 = (const uint8_t*)src32;
+			}
+			memcpy(dst8, src8, toRead);
+#else
 			const size_t toRead = std::min<size_t>(pb->len - readIndex, length);
 			memcpy(data + lengthRead, (uint8_t *)pb->payload + readIndex, toRead);
 			lengthRead += toRead;
 			readIndex += toRead;
+#endif
 			length -= toRead;
 			if (readIndex != pb->len)
 			{
@@ -238,12 +263,7 @@ size_t Connection::Read(uint8_t *data, size_t length)
 			readIndex = 0;
 		} while (pb != nullptr && length != 0);
 
-		alreadyRead += lengthRead;
-		if (pb == nullptr || alreadyRead >= TCP_MSS)
-		{
-			tcp_recved(ownPcb, alreadyRead);
-			alreadyRead = 0;
-		}
+		tcp_recved(ownPcb, lengthRead);
 	}
 	return lengthRead;
 }
@@ -291,7 +311,7 @@ int Connection::Accept(tcp_pcb *pcb)
 	remotePort = pcb->remote_port;
 	remoteIp = pcb->remote_ip.addr;
 	writeTimer = closeTimer = 0;
-	unAcked = readIndex = alreadyRead = 0;
+	unAcked = readIndex = 0;
 
 	return ERR_OK;
 }
@@ -331,7 +351,7 @@ int Connection::ConnRecv(pbuf *p, int err)
 	else
 	{
 		pb = p;
-		readIndex = alreadyRead = 0;
+		readIndex = 0;
 	}
 	//debugPrint("Packet rcvd\n");
 	return ERR_OK;
