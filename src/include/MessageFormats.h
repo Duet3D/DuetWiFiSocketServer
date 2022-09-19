@@ -280,6 +280,7 @@ const int32_t ResponseScanInProgress = -14;
 const size_t MaxRememberedNetworks = 20;
 static_assert((MaxRememberedNetworks + 1) * ReducedWirelessConfigurationDataSize <= MaxDataLength, "Too many remembered networks");
 
-const unsigned int WiFiBaudRate = 74880;		// this is the default baud rate for the ESP8266
+const unsigned int WiFiBaudRate = 74880;			// this is the default baud rate for the ESP8266
+const unsigned int WiFiBaudRate_ESP32 = 115200;		// this is the default baud rate for the ESP32
 
 #endif /* SRC_MESSAGEFORMATS_H_ */
