@@ -246,7 +246,8 @@ struct ConnStatusResponse
 {
 	ConnState state;
 	uint8_t socketNumber;
-	uint8_t dummy[2];
+	uint8_t protocol;					// valid in responses from version 2 WiFiServer firmware only
+	uint8_t dummy[1];
 	uint16_t localPort;
 	uint16_t remotePort;
 	uint32_t remoteIp;
