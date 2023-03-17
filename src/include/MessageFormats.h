@@ -71,7 +71,8 @@ enum class NetworkCommand : uint8_t
 #if 1
 	// Extra definitions for compatibility with RTOS version of WiFiSocketServer
 	networkStartScan,			// start a scan for APs the module can connect to
-	networkGetScanResult		// get the results of the previously started scan
+	networkGetScanResult,		// get the results of the previously started scan
+	networkAddEnterpriseSsid,	// add an enterprise ssid and its credentials
 #endif
 };
 
@@ -103,7 +104,7 @@ enum class EspWiFiPhyMode
 	N = 3,
 };
 
-enum class WiFiAuth
+enum class WiFiAuth : uint8_t
 {
 	OPEN = 0,
 	WEP,
@@ -119,7 +120,7 @@ enum class WiFiAuth
 
 struct WiFiScanData
 {
-	int8_t rssi;	/* signal strength from -100 to 0 in dB */
+	int8_t rssi;					// signal strength from -100 to 0 in dB
 	EspWiFiPhyMode phymode;
 	WiFiAuth auth;
 	char ssid[SsidLength + 1];
@@ -270,12 +271,14 @@ const int32_t ResponseBusy = -8;
 const int32_t ResponseBufferTooSmall = -9;
 const int32_t ResponseBadReplyFormatVersion = -10;
 const int32_t ResponseBadParameter = -11;
-const int32_t ResponseUnknownError = -12;
 
 #if 1
 // Extra definitions for compatibility with RTOS version of WiFiSocketServer
-const int32_t ResponseNoScanStarted = -13;
-const int32_t ResponseScanInProgress = -14;
+const int32_t ResponseNoScanStarted = -12;
+const int32_t ResponseScanInProgress = -13;
+const int32_t ResponseUnknownError = -14;
+#else
+const int32_t ResponseUnknownError = -12;		// this was correct for WiFiServer 1.27 and earlier, however it is never returned by those versions of WiFi firmware
 #endif
 
 const size_t MaxRememberedNetworks = 20;
