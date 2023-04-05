@@ -32,6 +32,8 @@ const uint32_t maxSpiFileData = 2048;
 // 0x2402	26.7MHz 1:2
 // 0x2002	26.7MHz 2:1
 // 0x3043	20MHz 2:2
+// 0x4044	16MHz 3:2
+// 0x4084	16MHz 2:3 (not tested)
 
 // The SAM4E occasionally transmits incorrect data at 40MHz, so we now use 26.7MHz.
 // Due to the 15ns SCLK to MISO delay of the SAMD51, 2:1 is preferred over 1:2
