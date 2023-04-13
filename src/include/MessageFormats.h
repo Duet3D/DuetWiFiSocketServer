@@ -97,7 +97,7 @@ const size_t headerDwords = NumDwords(sizeof(MessageHeaderSamToEsp));
 #if 1
 
 // Extra definitions for compatibility with RTOS version of WiFiSocketServer
-enum class EspWiFiPhyMode
+enum class EspWiFiPhyMode : uint8_t
 {
 	B = 1,
 	G = 2,
