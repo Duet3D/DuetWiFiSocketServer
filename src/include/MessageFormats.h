@@ -123,6 +123,11 @@ struct WiFiScanData
 	int8_t rssi;					// signal strength from -100 to 0 in dB
 	EspWiFiPhyMode phymode;
 	WiFiAuth auth;
+#if 1	// added at version 2.1beta4
+	uint8_t primaryChannel;
+	uint8_t mac[6];
+	uint8_t spare[2];			// spare fore future use
+#endif
 	char ssid[SsidLength + 1];
 };
 
@@ -210,6 +215,17 @@ struct NetworkStatusResponse
 	char ssid[SsidLength];			// SSID of the router we are connected to, or our own SSID, null terminated
 	char hostName[64];				// name of the access point we are connected to, or our own access point name, null terminated
 	uint32_t clockReg;				// the SPI clock register
+
+	// Added at version 2.1
+	uint32_t netmask;				// subnet mask of the network connected to/created
+	uint32_t gateway;				// endorsed gateway IP of the network connected to/created
+	uint32_t numReconnects;			// number of reconnections since the explicit STA connection by RRF
+	uint8_t  usingDhcpc;			// if the current ip, netmask, gateway was obtained through DHCP as a client
+	WiFiAuth auth;					// authentication method of the AP connected to in STA mode, in AP mode always WPA2-Personal
+	uint8_t channel : 4,			// primary channel used by the STA/AP connection
+			ht:	2,					// HT20, HT40 above, HT40 below
+			zero3: 2;				// unused, set to zero
+	uint8_t zero4;					// unused, set to zero
 };
 
 /* The reset reasons are coded as follows (see resetReasonTexts in file WiFiInterface.cpp in the RepRapFirmware project):
