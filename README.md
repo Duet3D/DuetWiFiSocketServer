@@ -1,4 +1,4 @@
-# DuetWifiSocketServer
+# DuetWiFiSocketServer
 
 This is a brief description howto setup the build environment for DuetWifiSocketServer
 
