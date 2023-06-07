@@ -149,6 +149,48 @@ const uint8_t protocolFTP = 1;
 const uint8_t protocolTelnet = 2;
 const uint8_t protocolFtpData = 3;
 
+const size_t MaxCredentialChunkSize = MaxDataLength;
+
+// Message data sent from SAM to ESP to add an SSID or set the access point configuration. This is also the format of a remembered SSID entry.
+union __attribute__((__packed__)) CredentialsInfo
+{
+	struct {
+		uint32_t anonymousId;
+		uint32_t caCert;
+		union {
+			struct {
+				uint32_t identity;
+				uint32_t password;
+			} peapttls;
+
+			struct {
+				uint32_t userCert;
+				uint32_t privateKey;
+				uint32_t privateKeyPswd;
+			} tls;
+		};
+	} asMemb;
+	uint32_t asArr[(sizeof(asMemb) / sizeof(uint32_t))];
+};
+
+#define CredentialIndex(cred)	(offsetof(CredentialsInfo, asMemb.cred)/ sizeof(uint32_t))
+
+enum class EAPProtocol : uint8_t
+{
+	NONE = 0,
+	EAP_TLS,
+	EAP_PEAP_MSCHAPV2,
+	EAP_TTLS_MSCHAPV2
+};
+
+enum class AddEnterpriseSsidFlag : uint8_t
+{
+	SSID = 0,		// SSID info is sent
+	CREDENTIAL,		// Credentials for SSID are stored
+	COMMIT,			// SSID info is stored
+	CANCEL,			// Cancel the storage
+};
+
 // Message data sent from SAM to ESP to add an SSID or set the access point configuration. This is also the format of a remembered SSID entry.
 struct WirelessConfigurationData
 {
@@ -159,7 +201,14 @@ struct WirelessConfigurationData
 	int8_t security;				// what type of network security if running in access point mode
 	int8_t dummy[2];
 	char ssid[SsidLength];			// the SSID
-	char password[PasswordLength];	// the WiFi password
+	union {
+		char password[PasswordLength];	// password for personal networks
+		struct {
+			CredentialsInfo credSizes;
+			uint8_t res[PasswordLength - (sizeof(EAPProtocol) + sizeof(CredentialsInfo))];
+			EAPProtocol protocol;	// null terminator if PSK
+		} eap;
+	};
 };
 
 const size_t ReducedWirelessConfigurationDataSize = offsetof(WirelessConfigurationData, password);
