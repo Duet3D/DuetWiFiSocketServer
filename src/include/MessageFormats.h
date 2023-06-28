@@ -277,6 +277,8 @@ struct NetworkStatusResponse
 	uint8_t zero4;					// unused, set to zero
 };
 
+constexpr size_t MinimumStatusResponseLength = offsetof(NetworkStatusResponse, clockReg);		// valid status responses should be at least this long
+
 /* The reset reasons are coded as follows (see resetReasonTexts in file WiFiInterface.cpp in the RepRapFirmware project):
  * 0 "Power up"
  * 1 "Hardware watchdog"
