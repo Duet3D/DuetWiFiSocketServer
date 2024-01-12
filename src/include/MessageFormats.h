@@ -27,7 +27,7 @@ static_assert(MaxDataLength % sizeof(uint32_t) == 0, "MaxDataLength must be a wh
 const uint8_t MyFormatVersion = 0x3E;
 const uint8_t InvalidFormatVersion = 0xC9;				// must be different from any format version we have ever used
 
-const uint32_t AnyIp = 0;
+const uint32_t AnyIp = 0;								// must be the same as AcceptAnyIp in NetworkDefs.h
 
 // Return a size rounded up to to a whole number of dwords
 static inline constexpr size_t NumDwords(size_t arg)
